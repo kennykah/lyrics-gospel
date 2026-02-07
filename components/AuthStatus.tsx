@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 export default function AuthStatus() {
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -30,37 +31,74 @@ export default function AuthStatus() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setMenuOpen(false);
   };
 
   if (loading) {
-    return <div className="text-sm text-gray-500">...</div>;
+    return (
+      <div className="w-8 h-8 rounded-full bg-black/[0.04] animate-pulse" />
+    );
   }
 
   if (!email) {
     return (
-      <div className="flex items-center gap-3 text-sm">
-        <Link href="/auth/login" className="text-gray-700 hover:text-purple-700">
-          Se connecter
-        </Link>
-        <Link
-          href="/auth/signup"
-          className="px-3 py-1.5 rounded-full bg-purple-600 text-white hover:bg-purple-700"
-        >
-          Créer un compte
-        </Link>
-      </div>
+      <Link
+        href="/auth/login"
+        className="w-8 h-8 rounded-full bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-colors"
+        aria-label="Se connecter"
+      >
+        <svg className="w-4 h-4 text-[--text-secondary]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+        </svg>
+      </Link>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="text-gray-600 truncate max-w-[160px]">{email}</span>
+    <div className="relative">
       <button
-        onClick={handleLogout}
-        className="px-3 py-1.5 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+        onClick={() => setMenuOpen(!menuOpen)}
+        className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#a78bfa] flex items-center justify-center text-white text-xs font-semibold shadow-sm hover:shadow-md transition-shadow"
+        aria-label="Mon compte"
       >
-        Déconnexion
+        {email[0].toUpperCase()}
       </button>
+
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-56 z-50 glass-heavy rounded-[14px] border border-black/[0.08] shadow-xl animate-scale-in overflow-hidden">
+            <div className="px-4 py-3 border-b border-black/[0.06]">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-[--text-tertiary]">Connecté</p>
+              <p className="text-[13px] font-medium text-[--text-primary] truncate mt-0.5">{email}</p>
+            </div>
+            <div className="py-1">
+              <Link
+                href="/sync"
+                onClick={() => setMenuOpen(false)}
+                className="block px-4 py-2 text-[13px] text-[--text-primary] hover:bg-black/[0.04] transition-colors"
+              >
+                Mon Espace
+              </Link>
+              <Link
+                href="/upload"
+                onClick={() => setMenuOpen(false)}
+                className="block px-4 py-2 text-[13px] text-[--text-primary] hover:bg-black/[0.04] transition-colors"
+              >
+                Importer un LRC
+              </Link>
+            </div>
+            <div className="py-1 border-t border-black/[0.06]">
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-2 text-[13px] text-red-500 hover:bg-red-50 transition-colors"
+              >
+                Déconnexion
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

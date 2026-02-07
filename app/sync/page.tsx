@@ -2,11 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import AuthGuard from '@/components/AuthGuard';
 import LyricEditor from '@/components/LyricEditor';
 import type { SyncedLine } from '@/utils/lrcParser';
 import { createLrcFile, createSong, getCurrentUserId } from '@/lib/supabaseData';
 
 export default function SyncPage() {
+  return (
+    <AuthGuard>
+      <SyncPageContent />
+    </AuthGuard>
+  );
+}
+
+function SyncPageContent() {
+  const router = useRouter();
   const [savedLrc, setSavedLrc] = useState<string | null>(null);
   const [savedLines, setSavedLines] = useState<SyncedLine[]>([]);
   const [title, setTitle] = useState('');
@@ -69,66 +80,108 @@ export default function SyncPage() {
     }
 
     setSaving(false);
-    setSuccess('Sauvegardé dans Supabase.');
+    setSuccess('Sauvegardé avec succès ! Redirection...');
+    setTimeout(() => router.push(`/songs/${song.id}`), 1500);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
-      <div className="container mx-auto px-6 py-12">
+    <div className="min-h-screen bg-[#0d0d12] pt-[52px]">
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {/* Breadcrumb */}
         <div className="mb-6">
-          <Link href="/" className="text-sm text-purple-700 hover:text-purple-800">
-            ← Retour à l&apos;accueil
+          <Link href="/" className="inline-flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white/70 transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            Retour
           </Link>
         </div>
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-2xl p-6 mb-6 border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4">Informations de la chanson</h2>
 
-            {error && (
-              <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>
-            )}
-            {success && (
-              <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg text-sm mb-4">{success}</div>
-            )}
+        {/* Song info card */}
+        <div className="rounded-[20px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] p-6 mb-6">
+          <h2 className="text-[15px] font-semibold text-white mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+            </svg>
+            Informations de la chanson
+          </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Artiste *</label>
-                <input
-                  value={artist}
-                  onChange={(e) => setArtist(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-[12px] bg-red-500/10 border border-red-500/20 text-[13px] text-red-400">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="mb-4 px-4 py-3 rounded-[12px] bg-green-500/10 border border-green-500/20 text-[13px] text-green-400">
+              {success}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                Titre *
+              </label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2.5 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-[--accent]/40 transition-colors"
+                placeholder="Nom de la chanson"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                Artiste *
+              </label>
+              <input
+                value={artist}
+                onChange={(e) => setArtist(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2.5 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-[--accent]/40 transition-colors"
+                placeholder="Nom de l'artiste"
+              />
             </div>
           </div>
+        </div>
 
-          <LyricEditor onSave={handleSave} onCancel={() => setSavedLrc(null)} />
+        {/* Editor */}
+        <LyricEditor onSave={handleSave} onCancel={() => setSavedLrc(null)} />
 
-          {savedLrc && (
-            <div className="mt-8 bg-white rounded-2xl p-6 border border-gray-200">
-              <h3 className="text-lg font-semibold mb-2">LRC généré</h3>
-              <p className="text-sm text-gray-600 mb-4">Copiez ce contenu pour l&apos;utiliser ailleurs.</p>
-              <pre className="bg-gray-100 p-4 rounded-lg text-sm overflow-x-auto">{savedLrc}</pre>
-              <div className="mt-4 text-sm text-gray-500">Lignes synchronisées: {savedLines.length}</div>
+        {/* Generated LRC output */}
+        {savedLrc && (
+          <div className="mt-6 rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[15px] font-semibold text-white">LRC généré</h3>
+                <p className="text-[12px] text-white/30 mt-0.5">
+                  {savedLines.length} lignes synchronisées
+                </p>
+              </div>
               <button
                 onClick={handleSaveSupabase}
                 disabled={saving}
-                className="mt-4 inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                className="btn-primary text-[13px] py-2.5 px-5 disabled:opacity-30"
               >
-                {saving ? 'Sauvegarde...' : 'Sauvegarder dans Supabase'}
+                {saving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Sauvegarde...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+                    </svg>
+                    Sauvegarder
+                  </>
+                )}
               </button>
             </div>
-          )}
-        </div>
+
+            <pre className="bg-white/[0.03] border border-white/[0.04] rounded-[12px] p-4 text-[12px] text-white/40 font-mono overflow-x-auto leading-relaxed max-h-48">
+              {savedLrc}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );

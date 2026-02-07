@@ -10,18 +10,22 @@ interface LyricPlayerProps {
 
 export default function LyricPlayer({ syncedLyrics, lrcRaw }: LyricPlayerProps) {
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioError, setAudioError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioFile) return;
 
-    audio.src = URL.createObjectURL(audioFile);
+    const objectUrl = URL.createObjectURL(audioFile);
+    audio.src = objectUrl;
     audio.load();
 
     const updateTime = () => setCurrentTime(audio.currentTime);
@@ -43,6 +47,7 @@ export default function LyricPlayer({ syncedLyrics, lrcRaw }: LyricPlayerProps) 
     audio.addEventListener('ended', handleEnded);
 
     return () => {
+      URL.revokeObjectURL(objectUrl);
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
       audio.removeEventListener('play', handlePlay);
@@ -60,12 +65,23 @@ export default function LyricPlayer({ syncedLyrics, lrcRaw }: LyricPlayerProps) 
     return idx;
   }, [currentTime, syncedLyrics]);
 
+  // Auto-scroll to active line
+  useEffect(() => {
+    if (currentLine < 0 || !lyricsContainerRef.current) return;
+    const container = lyricsContainerRef.current;
+    const activeLine = container.children[currentLine] as HTMLElement;
+    if (activeLine) {
+      activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [currentLine]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type.startsWith('audio/') && file.size <= 10 * 1024 * 1024) {
       setAudioFile(file);
+      setAudioError('');
     } else {
-      alert('Veuillez sélectionner un fichier audio valide (max 10MB).');
+      setAudioError('Veuillez sélectionner un fichier audio valide (max 10MB).');
     }
   };
 
@@ -76,6 +92,13 @@ export default function LyricPlayer({ syncedLyrics, lrcRaw }: LyricPlayerProps) 
       await audio.play();
     } else {
       audio.pause();
+    }
+  };
+
+  const seekToLine = (line: SyncedLine) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = line.time;
+      setCurrentTime(line.time);
     }
   };
 
@@ -91,106 +114,153 @@ export default function LyricPlayer({ syncedLyrics, lrcRaw }: LyricPlayerProps) 
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   if (!audioFile) {
     return (
-      <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-200">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+      <div className="rounded-[20px] bg-[#0d0d12] p-10 text-center">
+        <div className="w-16 h-16 rounded-full bg-white/[0.06] flex items-center justify-center mx-auto mb-5">
+          <svg className="w-7 h-7 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
         </div>
-        <p className="text-gray-600 mb-4">
-          Téléchargez un fichier audio pour écouter et voir la synchronisation
+        <p className="text-[15px] text-white/40 mb-5">
+          Chargez un fichier audio pour prévisualiser la synchronisation
         </p>
         <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center px-6 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all shadow-sm hover:shadow-md"
+          className="btn-primary text-[13px] py-2.5 px-6"
         >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
           Choisir un fichier audio
         </button>
+        <p className="text-[11px] text-white/20 mt-3">MP3, WAV, OGG — 10 MB max</p>
+        {audioError && (
+          <p className="text-red-400 text-[12px] mt-2" role="alert">{audioError}</p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
-      <audio ref={audioRef} preload="metadata" controls className="w-full mb-6" />
+    <div className="rounded-[20px] bg-[#0d0d12] overflow-hidden">
+      <audio ref={audioRef} preload="metadata" className="hidden" />
 
-      <div className="mb-8">
-        <h3 className="text-2xl font-bold text-gray-900 mb-6">Lecteur audio</h3>
-        <div className="flex items-center justify-between mb-6">
+      {/* Transport controls */}
+      <div className="px-6 pt-6 pb-4">
+        <div className="flex items-center gap-4">
+          {/* Play/Pause */}
           <button
             onClick={togglePlay}
             disabled={!audioReady}
-            className="flex items-center justify-center w-14 h-14 bg-purple-600 text-white rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+            className="w-12 h-12 rounded-full bg-white/[0.08] hover:bg-white/[0.12] flex items-center justify-center transition-all disabled:opacity-30"
           >
             {isPlaying ? (
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" />
               </svg>
             ) : (
-              <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}
           </button>
-          <div className="text-center">
-            <div className="text-2xl font-mono font-bold text-gray-900">{formatTime(currentTime)}</div>
-            <div className="text-sm text-gray-600">{formatTime(duration)}</div>
-          </div>
-        </div>
 
-        <div className="space-y-2">
-          <input
-            type="range"
-            min="0"
-            max={duration || 0}
-            value={currentTime}
-            onChange={handleSeek}
-            className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer slider"
-          />
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>0:00</span>
-            <span>{formatTime(duration)}</span>
+          {/* Time + Progress */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between text-[11px] text-white/30 mb-1.5 font-mono">
+              <span>{formatTime(currentTime)}</span>
+              <span>-{formatTime(Math.max(0, duration - currentTime))}</span>
+            </div>
+            <div className="relative h-[3px] bg-white/[0.08] rounded-full overflow-hidden">
+              <div
+                className="absolute top-0 left-0 h-full bg-[--accent] rounded-full transition-all duration-100"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={duration || 0}
+              step={0.01}
+              value={currentTime}
+              onChange={handleSeek}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              style={{ position: 'relative', height: '12px', marginTop: '-7px' }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-6">
-        <h4 className="text-xl font-semibold text-gray-900 mb-6">Paroles synchronisées</h4>
-        <div className="max-h-96 overflow-y-auto space-y-1">
-          {syncedLyrics.map((line, index) => (
-            <div
-              key={`${line.time}-${index}`}
-              className={`py-2 px-4 rounded-lg transition-all ${
-                index === currentLine
-                  ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-200'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <span className={`text-sm font-mono mr-3 ${index === currentLine ? 'text-white/90' : 'text-gray-500'}`}>
-                {formatTime(line.time)}
-              </span>
-              {line.text}
-            </div>
-          ))}
+      {/* Lyrics */}
+      <div className="relative">
+        {/* Top fade */}
+        <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[--player-bg] to-transparent z-10 pointer-events-none" />
+
+        <div ref={lyricsContainerRef} className="px-6 py-4 max-h-[360px] overflow-y-auto hide-scrollbar space-y-0.5">
+          {syncedLyrics.map((line, index) => {
+            const isActive = index === currentLine;
+            const isPast = index < currentLine;
+            return (
+              <button
+                key={`${line.time}-${index}`}
+                onClick={() => seekToLine(line)}
+                className={`w-full text-left py-2 px-3 rounded-[10px] transition-all duration-300 flex items-start gap-3 ${
+                  isActive
+                    ? 'bg-white/[0.06]'
+                    : 'hover:bg-white/[0.03]'
+                }`}
+              >
+                <span className={`text-[11px] font-mono mt-0.5 shrink-0 transition-colors duration-300 ${
+                  isActive ? 'text-[--accent]' : 'text-white/15'
+                }`}>
+                  {formatTime(line.time)}
+                </span>
+                <span className={`text-[15px] leading-relaxed transition-all duration-300 ${
+                  isActive
+                    ? 'text-white font-semibold scale-[1.01]'
+                    : isPast
+                    ? 'text-white/20'
+                    : 'text-white/40'
+                }`}>
+                  {line.text || '\u00A0'}
+                </span>
+              </button>
+            );
+          })}
         </div>
+
+        {/* Bottom fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[--player-bg] to-transparent pointer-events-none" />
       </div>
 
-      {lrcRaw && (
-        <div className="mt-6">
-          <details className="group">
-            <summary className="flex items-center cursor-pointer text-purple-700 hover:text-purple-800 transition-colors font-medium">
-              <svg className="w-5 h-5 mr-2 transform group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              Voir le fichier LRC brut
-            </summary>
-            <div className="mt-4 bg-gray-100 rounded-lg p-4">
-              <pre className="text-sm text-gray-600 overflow-x-auto font-mono">{lrcRaw}</pre>
-            </div>
-          </details>
+      {/* Footer */}
+      <div className="px-6 py-3 border-t border-white/[0.04] flex items-center justify-between">
+        <span className="text-[11px] text-white/20 font-mono">
+          {syncedLyrics.length} lignes
+        </span>
+        {lrcRaw && (
+          <button
+            onClick={() => setShowRaw(!showRaw)}
+            className="text-[11px] text-white/20 hover:text-white/40 transition-colors flex items-center gap-1"
+          >
+            <svg className={`w-3 h-3 transition-transform ${showRaw ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            LRC brut
+          </button>
+        )}
+      </div>
+
+      {/* Raw LRC */}
+      {showRaw && lrcRaw && (
+        <div className="px-6 pb-5">
+          <pre className="bg-white/[0.03] border border-white/[0.04] rounded-[12px] p-4 text-[11px] text-white/30 font-mono overflow-x-auto leading-relaxed max-h-48">
+            {lrcRaw}
+          </pre>
         </div>
       )}
     </div>

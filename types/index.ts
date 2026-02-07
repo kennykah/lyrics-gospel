@@ -26,3 +26,26 @@ export interface LrcFile {
   validated_by?: string;
   validated_at?: string;
 }
+
+export interface Artist {
+  id: string;
+  name: string;
+  slug: string;
+  bio?: string;
+  image_url?: string;
+  quote?: string;
+  ministry?: string;
+  country?: string;
+  website_url?: string;
+  social_links?: {
+    instagram?: string;
+    youtube?: string;
+    facebook?: string;
+    twitter?: string;
+    spotify?: string;
+  };
+  is_featured?: boolean;
+  featured_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
