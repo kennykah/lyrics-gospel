@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import type { SyncedLine } from '@/utils/lrcParser';
+import { slugifyArtistName } from '@/utils/artistSlug';
 
 export async function getCurrentUserId() {
   const { data, error } = await supabase.auth.getUser();
@@ -59,6 +60,48 @@ export async function createLrcFile(params: {
     })
     .select()
     .single();
+}
+
+export async function saveSongLrcCorrection(params: {
+  songId: string;
+  lrcRaw: string;
+  syncedLyrics: SyncedLine[];
+  plainLyrics: string;
+}) {
+  const userId = await getCurrentUserId();
+
+  const lrcResult = await supabase
+    .from('lrc_files')
+    .upsert(
+      {
+        song_id: params.songId,
+        synced_lyrics: params.syncedLyrics,
+        lrc_raw: params.lrcRaw,
+        source: 'manual',
+        created_by: userId,
+      },
+      { onConflict: 'song_id' }
+    )
+    .select()
+    .maybeSingle();
+
+  if (lrcResult.error) {
+    return { data: null, error: lrcResult.error };
+  }
+
+  const songResult = await supabase
+    .from('songs')
+    .update({
+      lyrics_text: params.plainLyrics,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.songId);
+
+  if (songResult.error) {
+    return { data: null, error: songResult.error };
+  }
+
+  return { data: lrcResult.data, error: null };
 }
 
 export async function fetchSongs(params: { page: number; pageSize: number; query?: string }) {
@@ -125,11 +168,13 @@ export async function fetchDistinctArtists(limit = 10) {
     .select('artist_name')
     .eq('status', 'published')
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(Math.max(limit * 3, limit));
   if (!data) return [];
   const unique = [...new Set(data.map((d: { artist_name: string }) => d.artist_name))].slice(0, limit);
   return unique;
 }
+
+export { slugifyArtistName };
 
 /* ─── Artist functions ─── */
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchAllArtists, fetchFeaturedArtist, fetchArtistSongCount, fetchDistinctArtists, toggleFeaturedArtist, fetchUserRole } from '@/lib/supabaseData';
 import type { Artist } from '@/types';
+import { slugifyArtistName } from '@/utils/artistSlug';
 
 /* ── Gradient palette for artist cards ── */
 const cardGradients = [
@@ -92,13 +93,7 @@ export default function ArtistsPage() {
   const getArtistSlug = (name: string): string => {
     const profile = getArtistProfile(name);
     if (profile) return profile.slug;
-    return name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '')
-      .slice(0, 80);
+    return slugifyArtistName(name);
   };
 
   const handleToggleFeatured = async (artistId: string, newState: boolean) => {
@@ -119,7 +114,7 @@ export default function ArtistsPage() {
 
   return (
     <div className="min-h-screen bg-[--background] pt-[52px]">
-      <div className="max-w-[1200px] mx-auto px-6 py-12">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-12">
 
         {/* ══ Page header ══ */}
         <div className="mb-10">
@@ -218,7 +213,7 @@ export default function ArtistsPage() {
               </Link>
             ) : randomFeatured ? (
               <Link
-                href={`/songs?q=${encodeURIComponent(randomFeatured)}`}
+                href={`/artists/${slugifyArtistName(randomFeatured)}`}
                 className="block group"
               >
                 <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#1a0533] via-[#0d0d12] to-[#0a1628] p-8 sm:p-10 border border-white/[0.06]">
@@ -292,7 +287,7 @@ export default function ArtistsPage() {
                 return (
                   <Link
                     key={name}
-                    href={profile ? `/artists/${slug}` : `/songs?q=${encodeURIComponent(name)}`}
+                    href={`/artists/${slug}`}
                     className="card-apple p-5 group relative"
                   >
                     <div className="flex items-center gap-4">

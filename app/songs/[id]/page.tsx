@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { fetchLrcBySongId, fetchSongById, fetchRelatedSongs } from '@/lib/supabaseData';
+import { fetchLrcBySongId, fetchSongById, fetchRelatedSongs, saveSongLrcCorrection } from '@/lib/supabaseData';
 import type { Song, LrcFile } from '@/types';
 import AppleLyricPlayer from '@/components/AppleLyricPlayer';
+import { slugifyArtistName } from '@/utils/artistSlug';
+import { extractPlainLyrics, generateLrc, parseLrc } from '@/utils/lrcParser';
 
 export default function SongDetailPage() {
   const params = useParams<{ id: string }>();
@@ -16,6 +18,12 @@ export default function SongDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'lyrics' | 'message'>('lyrics');
   const [copied, setCopied] = useState(false);
+  const [lyricsCopied, setLyricsCopied] = useState(false);
+  const [lrcDownloaded, setLrcDownloaded] = useState(false);
+  const [isEditingLrc, setIsEditingLrc] = useState(false);
+  const [lrcDraft, setLrcDraft] = useState('');
+  const [savingLrc, setSavingLrc] = useState(false);
+  const [lrcEditMessage, setLrcEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -40,6 +48,17 @@ export default function SongDetailPage() {
   }, [songId]);
 
   const syncedLyrics = useMemo(() => lrc?.synced_lyrics || [], [lrc]);
+  const plainLyrics = useMemo(() => {
+    if (syncedLyrics.length > 0) {
+      return syncedLyrics
+        .map((line) => line.text?.trim())
+        .filter(Boolean)
+        .join('\n');
+    }
+    if (song?.lyrics_text?.trim()) return song.lyrics_text.trim();
+    if (lrc?.lrc_raw?.trim()) return extractPlainLyrics(lrc.lrc_raw);
+    return '';
+  }, [syncedLyrics, song?.lyrics_text, lrc?.lrc_raw]);
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -53,6 +72,116 @@ export default function SongDetailPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleDownloadLrc = () => {
+    if (!song || syncedLyrics.length === 0) return;
+
+    const lrcContent = lrc?.lrc_raw?.trim()
+      ? lrc.lrc_raw
+      : generateLrc(syncedLyrics, { title: song.title, artist: song.artist_name });
+
+    const fileName = `${slugifyArtistName(song.artist_name)}-${slugifyArtistName(song.title)}.lrc`;
+    const blob = new Blob([lrcContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setLrcDownloaded(true);
+    setTimeout(() => setLrcDownloaded(false), 2000);
+  };
+
+  const handleCopyPlainLyrics = async () => {
+    if (!plainLyrics) return;
+    await navigator.clipboard.writeText(plainLyrics);
+    setLyricsCopied(true);
+    setTimeout(() => setLyricsCopied(false), 2000);
+  };
+
+  const handleShareOnWhatsApp = () => {
+    if (!song || !plainLyrics) return;
+
+    const preview = plainLyrics.length > 2800
+      ? `${plainLyrics.slice(0, 2800)}...`
+      : plainLyrics;
+    const message = `🎵 ${song.title} — ${song.artist_name}\n\n${preview}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleStartLrcEdit = () => {
+    if (!song || syncedLyrics.length === 0) return;
+
+    const initialLrc = lrc?.lrc_raw?.trim()
+      ? lrc.lrc_raw
+      : generateLrc(syncedLyrics, { title: song.title, artist: song.artist_name });
+
+    setLrcDraft(initialLrc);
+    setLrcEditMessage(null);
+    setIsEditingLrc(true);
+  };
+
+  const handleCancelLrcEdit = () => {
+    setIsEditingLrc(false);
+    setLrcEditMessage(null);
+  };
+
+  const handleSaveLrcCorrection = async () => {
+    if (!song) return;
+    const nextRaw = lrcDraft.trim();
+    const parsed = parseLrc(nextRaw);
+
+    if (parsed.length === 0) {
+      setLrcEditMessage({
+        type: 'error',
+        text: 'Format LRC invalide. Les timestamps doivent rester au format [mm:ss.xx].',
+      });
+      return;
+    }
+
+    const plain = parsed
+      .map((line) => line.text?.trim())
+      .filter(Boolean)
+      .join('\n');
+
+    setSavingLrc(true);
+    setLrcEditMessage(null);
+
+    const { error } = await saveSongLrcCorrection({
+      songId,
+      lrcRaw: nextRaw,
+      syncedLyrics: parsed,
+      plainLyrics: plain,
+    });
+
+    if (error) {
+      setLrcEditMessage({
+        type: 'error',
+        text: 'Impossible d’enregistrer la correction. Vérifie tes droits de contribution.',
+      });
+      setSavingLrc(false);
+      return;
+    }
+
+    setLrc((prev) => ({
+      id: prev?.id ?? `song-${songId}-lrc`,
+      song_id: songId,
+      synced_lyrics: parsed,
+      lrc_raw: nextRaw,
+      source: 'manual',
+      quality_score: prev?.quality_score,
+      validated_by: prev?.validated_by,
+      validated_at: prev?.validated_at,
+    }));
+    setSong((prev) => (prev ? { ...prev, lyrics_text: plain } : prev));
+    setLrcEditMessage({ type: 'success', text: 'Correction enregistrée avec succès.' });
+    setSavingLrc(false);
+    setIsEditingLrc(false);
   };
 
   const statusLabel: Record<string, string> = {
@@ -104,7 +233,7 @@ export default function SongDetailPage() {
 
       <div className="relative z-10 pt-[52px]">
         {/* Top bar */}
-        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href="/songs" className="inline-flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white/70 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -136,7 +265,7 @@ export default function SongDetailPage() {
         </div>
 
         {/* Main layout — iPad-style split */}
-        <div className="max-w-[1400px] mx-auto px-6 pb-12">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pb-12">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
 
             {/* ═══ LEFT: Player + Lyrics ═══ */}
@@ -216,13 +345,13 @@ export default function SongDetailPage() {
 
               {activeTab === 'lyrics' ? (
                 /* ── Song details panel ── */
-                <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-6 space-y-5" role="tabpanel">
+                <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-6 space-y-5" role="tabpanel">
                   <div>
                     <h3 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">Détails</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between text-[14px]">
                         <span className="text-white/40">Artiste</span>
-                        <Link href={`/songs?q=${encodeURIComponent(song.artist_name)}`} className="text-white/80 font-medium hover:text-[--accent] transition-colors">
+                        <Link href={`/artists/${slugifyArtistName(song.artist_name)}`} className="text-white/80 font-medium hover:text-[--accent] transition-colors">
                           {song.artist_name}
                         </Link>
                       </div>
@@ -329,6 +458,80 @@ export default function SongDetailPage() {
                         </p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-5">
+                <h3 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">Actions paroles</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    onClick={handleDownloadLrc}
+                    disabled={syncedLyrics.length === 0}
+                    className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-medium text-white/70 transition-colors"
+                  >
+                    {lrcDownloaded ? 'LRC téléchargé' : 'Télécharger le LRC'}
+                  </button>
+
+                  <button
+                    onClick={handleCopyPlainLyrics}
+                    disabled={!plainLyrics}
+                    className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-medium text-white/70 transition-colors"
+                  >
+                    {lyricsCopied ? 'Paroles copiées' : 'Copier les paroles'}
+                  </button>
+
+                  <button
+                    onClick={handleShareOnWhatsApp}
+                    disabled={!plainLyrics}
+                    className="h-10 px-3 rounded-[10px] bg-[--accent] hover:bg-[--accent-hover] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-semibold text-white transition-colors sm:col-span-2"
+                  >
+                    Partager les paroles sur WhatsApp
+                  </button>
+
+                  <button
+                    onClick={handleStartLrcEdit}
+                    disabled={syncedLyrics.length === 0}
+                    className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-medium text-white/70 transition-colors sm:col-span-2"
+                  >
+                    Corriger l’orthographe du LRC
+                  </button>
+                </div>
+                {lrcEditMessage && (
+                  <p className={`mt-3 text-[12px] ${lrcEditMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {lrcEditMessage.text}
+                  </p>
+                )}
+              </div>
+
+              {isEditingLrc && (
+                <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-5 space-y-3">
+                  <h3 className="text-[12px] font-semibold text-white/80">Correction rapide LRC</h3>
+                  <p className="text-[12px] text-white/45 leading-relaxed">
+                    Corrige uniquement le texte après les timestamps pour garder la synchronisation.
+                  </p>
+                  <textarea
+                    value={lrcDraft}
+                    onChange={(e) => setLrcDraft(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-[12px] border border-white/[0.12] bg-black/20 p-3 text-[12px] font-mono text-white/80 focus:outline-none focus:border-[--accent]"
+                    placeholder="[00:10.50]Première ligne corrigée"
+                  />
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={handleSaveLrcCorrection}
+                      disabled={savingLrc}
+                      className="h-10 px-4 rounded-[10px] bg-[--accent] hover:bg-[--accent-hover] disabled:opacity-40 text-[12px] font-semibold text-white transition-colors"
+                    >
+                      {savingLrc ? 'Enregistrement...' : 'Enregistrer la correction'}
+                    </button>
+                    <button
+                      onClick={handleCancelLrcEdit}
+                      disabled={savingLrc}
+                      className="h-10 px-4 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 text-[12px] font-medium text-white/70 transition-colors"
+                    >
+                      Annuler
+                    </button>
                   </div>
                 </div>
               )}

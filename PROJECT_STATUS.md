@@ -16,6 +16,8 @@
 - ✅ Contrôles de synchronisation avancés : annuler (undo), recommencer, modifier paroles, ajuster ±0.1s, re-sync ligne, effacer timing.
 - ✅ Raccourcis clavier (Espace = sync, ⌫/Ctrl+Z = annuler, ←→ = ±5s).
 - ✅ Génération et sauvegarde LRC dans Supabase (`songs` + `lrc_files`).
+- ✅ Actions paroles sur page chanson : téléchargement `.lrc`, copie des paroles sans timestamps, partage du texte via WhatsApp.
+- ✅ Correction orthographique rapide des LRC synchronisés directement depuis la page chanson (sans réupload).
 - ✅ Tests unitaires LRC parser (Vitest).
 
 ### Authentification
@@ -41,6 +43,7 @@
 - ✅ Lien actif dans la navigation.
 - ✅ Accessibilité de base (ARIA labels, focus-visible, prefers-reduced-motion).
 - ✅ Correction des fuites Object URL (revokeObjectURL dans cleanup).
+- ✅ Optimisations mobile-first (espacements smartphone, cibles tactiles min 44px, safe-area iOS, actions paroles accessibles sur mobile).
 
 ### Admin
 - ✅ Toggle artiste mis en avant (depuis la page artiste, rôle admin requis).

@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole } from '@/lib/supabaseData';
+import { fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists } from '@/lib/supabaseData';
 import type { Artist, Song } from '@/types';
+import { slugifyArtistName } from '@/utils/artistSlug';
 
 function getInitials(name: string) {
   return name
@@ -79,6 +80,7 @@ export default function ArtistDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [featureToggling, setFeatureToggling] = useState(false);
+  const [isVirtualArtist, setIsVirtualArtist] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -87,34 +89,63 @@ export default function ArtistDetailPage() {
 
   async function loadArtist() {
     setLoading(true);
-    const [artistRes, roleRes] = await Promise.all([
+    setNotFound(false);
+    const [artistRes, roleRes, allArtistsRes, songArtists] = await Promise.all([
       fetchArtistBySlug(slug),
       fetchUserRole(),
+      fetchAllArtists(),
+      fetchDistinctArtists(500),
     ]);
 
     setUserRole(roleRes);
 
-    if (!artistRes.data) {
-      setNotFound(true);
+    const allArtists = (allArtistsRes.data as Artist[]) || [];
+    const artistByNormalizedName = allArtists.find((item) => slugifyArtistName(item.name) === slug) || null;
+    const artistData = (artistRes.data as Artist | null) || artistByNormalizedName;
+
+    if (artistData) {
+      setArtist(artistData);
+      setIsVirtualArtist(false);
+
+      const [songsRes, count] = await Promise.all([
+        fetchSongsByArtistName(artistData.name),
+        fetchArtistSongCount(artistData.name),
+      ]);
+
+      setSongs((songsRes.data as Song[]) || []);
+      setSongCount(count);
       setLoading(false);
       return;
     }
 
-    const artistData = artistRes.data as Artist;
-    setArtist(artistData);
+    const fallbackName = songArtists.find((name) => slugifyArtistName(name) === slug);
+    if (!fallbackName) {
+      setNotFound(true);
+      setArtist(null);
+      setSongs([]);
+      setSongCount(0);
+      setLoading(false);
+      return;
+    }
+
+    setArtist({
+      id: `virtual-${slug}`,
+      name: fallbackName,
+      slug: slugifyArtistName(fallbackName),
+    });
+    setIsVirtualArtist(true);
 
     const [songsRes, count] = await Promise.all([
-      fetchSongsByArtistName(artistData.name),
-      fetchArtistSongCount(artistData.name),
+      fetchSongsByArtistName(fallbackName),
+      fetchArtistSongCount(fallbackName),
     ]);
-
     setSongs((songsRes.data as Song[]) || []);
     setSongCount(count);
     setLoading(false);
   }
 
   const handleToggleFeatured = async () => {
-    if (!artist) return;
+    if (!artist || isVirtualArtist) return;
     setFeatureToggling(true);
     await toggleFeaturedArtist(artist.id, !artist.is_featured);
     const res = await fetchArtistBySlug(slug);
@@ -165,7 +196,7 @@ export default function ArtistDetailPage() {
         <div className="absolute top-[-20%] left-[10%] w-[50%] h-[60%] bg-purple-600/20 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-30%] right-[5%] w-[40%] h-[50%] bg-blue-500/15 rounded-full blur-[80px]" />
 
-        <div className="relative z-10 max-w-[1200px] mx-auto px-6 pt-[100px] pb-12 sm:pb-16">
+        <div className="relative z-10 max-w-[1200px] mx-auto px-4 sm:px-6 pt-[100px] pb-12 sm:pb-16">
           <Link href="/artists" className="inline-flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white/70 transition-colors mb-8">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -221,7 +252,7 @@ export default function ArtistDetailPage() {
               </div>
 
               {/* Admin controls */}
-              {userRole === 'admin' && (
+              {userRole === 'admin' && !isVirtualArtist && (
                 <button
                   onClick={handleToggleFeatured}
                   disabled={featureToggling}
@@ -236,7 +267,7 @@ export default function ArtistDetailPage() {
       </section>
 
       {/* ══ Content ══ */}
-      <div className="max-w-[1200px] mx-auto px-6 py-10">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
           {/* ── Main content (left 2 cols) ── */}

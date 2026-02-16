@@ -13,7 +13,7 @@ export default function SongsPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-[--background] pt-[52px]">
-        <div className="max-w-[1200px] mx-auto px-6 py-12">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-12">
           <div className="h-10 bg-[--surface] rounded-full w-48 mb-10 animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -77,7 +77,7 @@ function SongsContent() {
 
   return (
     <div className="min-h-screen bg-[--background] pt-[52px]">
-      <div className="max-w-[1200px] mx-auto px-6 py-12">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-12">
         {/* Page header */}
         <div className="flex items-end justify-between mb-10">
           <div>

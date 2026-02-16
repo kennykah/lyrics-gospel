@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { fetchRecentSongs, fetchSongCount, fetchLrcCount, fetchDistinctArtists } from '@/lib/supabaseData';
 import type { Song } from '@/types';
+import { slugifyArtistName } from '@/utils/artistSlug';
 
 /* ── Verse of the Day — rotates daily ── */
 const bibleVerses = [
@@ -120,7 +121,7 @@ export default function Home() {
         <div className="absolute top-[30%] right-[20%] w-[30%] h-[30%] bg-pink-500/10 rounded-full blur-[80px]" style={{ animation: 'float 5s ease-in-out infinite reverse' }} />
 
         {/* Hero content */}
-        <div className="relative z-10 text-center px-6 max-w-4xl mx-auto pt-16">
+        <div className="relative z-10 text-center px-4 sm:px-6 max-w-4xl mx-auto pt-16">
           {/* Pill badge */}
           <div className="animate-fade-in-up inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] backdrop-blur-sm mb-8">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -183,7 +184,7 @@ export default function Home() {
       {/* ═══════════════════════════════════════════
           VERSET DU JOUR
           ═══════════════════════════════════════════ */}
-      <section className="max-w-[1200px] mx-auto px-6 py-16">
+      <section className="max-w-[1200px] mx-auto px-4 sm:px-6 py-16">
         <div className="relative rounded-[24px] bg-gradient-to-r from-[--accent]/5 via-purple-50 to-[--accent]/5 border border-[--accent]/10 p-8 sm:p-10 overflow-hidden">
           {/* Decorative cross */}
           <div className="absolute top-4 right-6 text-[--accent]/10 text-6xl font-serif select-none">✝</div>
@@ -207,7 +208,7 @@ export default function Home() {
           AJOUTÉS RÉCEMMENT (dynamic from Supabase)
           ═══════════════════════════════════════════ */}
       {loaded && recentSongs.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-6 pb-20">
+        <section className="max-w-[1200px] mx-auto px-4 sm:px-6 pb-20">
           <div className="flex items-end justify-between mb-8">
             <div>
               <h2 className="text-3xl sm:text-4xl font-bold text-[--text-primary] tracking-[-0.03em]">
@@ -264,7 +265,7 @@ export default function Home() {
       {/* ═══════════════════════════════════════════
           PAROLES QUI IMPACTENT (curated)
           ═══════════════════════════════════════════ */}
-      <section className="max-w-[1200px] mx-auto px-6 pb-20">
+      <section className="max-w-[1200px] mx-auto px-4 sm:px-6 pb-20">
         <div className="flex items-end justify-between mb-10">
           <div>
             <h2 className="text-3xl sm:text-4xl font-bold text-[--text-primary] tracking-[-0.03em]">
@@ -310,7 +311,7 @@ export default function Home() {
           ARTISTES (dynamic from Supabase)
           ═══════════════════════════════════════════ */}
       {artists.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-6 pb-24">
+        <section className="max-w-[1200px] mx-auto px-4 sm:px-6 pb-24">
           <div className="flex items-end justify-between mb-10">
             <div>
               <h2 className="text-3xl sm:text-4xl font-bold text-[--text-primary] tracking-[-0.03em]">
@@ -329,7 +330,7 @@ export default function Home() {
             {artists.map((name, i) => (
               <Link
                 key={name}
-                href={`/artists/${encodeURIComponent(name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '').slice(0, 80))}`}
+                href={`/artists/${slugifyArtistName(name)}`}
                 className="group flex-shrink-0 w-[180px] snap-start"
               >
                 <div className={`w-full aspect-square rounded-[24px] bg-gradient-to-br ${artistColors[i % artistColors.length]} mb-4 overflow-hidden relative transition-all duration-500 group-hover:shadow-lg group-hover:scale-[1.02]`}>
@@ -351,7 +352,7 @@ export default function Home() {
           HOW IT WORKS — Onboarding
           ═══════════════════════════════════════════ */}
       <section className="bg-[--surface] border-t border-[--border]">
-        <div className="max-w-[1200px] mx-auto px-6 py-20">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-20">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-bold text-[--text-primary] tracking-[-0.03em]">
               Comment ça marche
@@ -420,7 +421,7 @@ export default function Home() {
           FOOTER
           ═══════════════════════════════════════════ */}
       <footer className="border-t border-[--border] bg-[--background]">
-        <div className="max-w-[1200px] mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-[7px] bg-gradient-to-br from-[#6c5ce7] to-[#a78bfa] flex items-center justify-center">
               <span className="text-white text-[9px] font-bold">GL</span>

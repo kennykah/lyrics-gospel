@@ -93,6 +93,13 @@ body {
   letter-spacing: -0.011em;
 }
 
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 /* ── Custom scrollbar (Apple-style thin) ── */
 ::-webkit-scrollbar {
   width: 6px;
@@ -407,6 +414,23 @@ input[type="range"].slider-light::-webkit-slider-thumb {
 }
 .btn-ghost:hover {
   background: var(--accent-light);
+}
+
+/* ── Mobile ergonomics ── */
+@media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    min-height: 44px;
+  }
+
+  .card-apple {
+    border-radius: 22px;
+  }
 }
 
 /* ── Accessibility: Reduced Motion ── */
