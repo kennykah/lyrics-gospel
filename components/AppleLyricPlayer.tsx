@@ -9,29 +9,27 @@ interface AppleLyricPlayerProps {
   audioUrl?: string | null;
 }
 
-export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: AppleLyricPlayerProps) {
-  const [audioFile, setAudioFile] = useState<File | null>(null);
+export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricPlayerProps) {
   const [audioError, setAudioError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
   const [localObjectUrl, setLocalObjectUrl] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const playerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!audioFile) {
-      setLocalObjectUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(audioFile);
-    setLocalObjectUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [audioFile]);
+    return () => {
+      if (localObjectUrl) {
+        URL.revokeObjectURL(localObjectUrl);
+      }
+    };
+  }, [localObjectUrl]);
 
   const remoteAudioUrl = audioUrl?.startsWith('http') ? audioUrl : null;
   const effectiveAudioSrc = localObjectUrl || remoteAudioUrl || '';
@@ -40,11 +38,10 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
     const audio = audioRef.current;
     if (!audio || !effectiveAudioSrc) return;
 
-    audio.src = effectiveAudioSrc;
-    audio.load();
-    setAudioReady(false);
-    setCurrentTime(0);
-
+    const handleLoadStart = () => {
+      setAudioReady(false);
+      setCurrentTime(0);
+    };
     const updateTime = () => setCurrentTime(audio.currentTime);
     const updateDuration = () => {
       setDuration(audio.duration);
@@ -61,6 +58,7 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
       setAudioError('Impossible de lire cet audio. Vérifiez le lien Supabase ou chargez un fichier local.');
     };
 
+    audio.addEventListener('loadstart', handleLoadStart);
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
     audio.addEventListener('play', handlePlay);
@@ -68,7 +66,11 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleAudioError);
 
+    audio.src = effectiveAudioSrc;
+    audio.load();
+
     return () => {
+      audio.removeEventListener('loadstart', handleLoadStart);
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
       audio.removeEventListener('play', handlePlay);
@@ -98,7 +100,13 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type.startsWith('audio/') && file.size <= 10 * 1024 * 1024) {
-      setAudioFile(file);
+      const objectUrl = URL.createObjectURL(file);
+      setLocalObjectUrl((previousUrl) => {
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl);
+        }
+        return objectUrl;
+      });
       setAudioError('');
       setCurrentTime(0);
       setAudioReady(false);
@@ -148,8 +156,46 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === playerRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const element = playerRef.current;
+    if (!element) return;
+    const orientation = (screen as Screen & {
+      orientation?: {
+        lock?: (orientation: 'landscape' | 'portrait') => Promise<void>;
+        unlock?: () => void;
+      };
+    }).orientation;
+
+    if (document.fullscreenElement === element) {
+      await document.exitFullscreen();
+      if (orientation?.unlock) {
+        orientation.unlock();
+      }
+      return;
+    }
+
+    if (!element.requestFullscreen) return;
+    await element.requestFullscreen();
+
+    if (orientation?.lock) {
+      try {
+        await orientation.lock('landscape');
+      } catch {
+      }
+    }
+  };
+
   return (
-    <div className="rounded-[24px] bg-white/[0.04] border border-white/[0.06] overflow-hidden">
+    <div ref={playerRef} className={`rounded-[24px] bg-white/[0.04] border border-white/[0.06] overflow-hidden ${isFullscreen ? 'bg-[#0d0d12]' : ''}`}>
       <audio ref={audioRef} preload="metadata" className="hidden" />
 
       {!effectiveAudioSrc ? (
@@ -171,8 +217,14 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
           {audioError && <p className="text-red-400 text-[12px] mt-2" role="alert">{audioError}</p>}
         </div>
       ) : (
-        <div className="px-8 py-6 border-b border-white/[0.06]">
+        <div className="px-4 sm:px-8 py-5 sm:py-6 border-b border-white/[0.06]">
           <div className="flex items-center justify-end mb-3">
+            <button
+              onClick={toggleFullscreen}
+              className="text-[11px] text-white/35 hover:text-white/60 transition-colors mr-3"
+            >
+              {isFullscreen ? 'Quitter plein écran' : 'Plein écran'}
+            </button>
             <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} className="text-[11px] text-white/35 hover:text-white/60 transition-colors">
               Remplacer l&apos;audio
@@ -210,11 +262,7 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
       )}
 
       <div className="relative">
-        <div className="absolute top-4 right-6 text-[11px] text-white/20 font-mono">
-          {currentLine >= 0 ? currentLine + 1 : '—'} / {syncedLyrics.length} lines
-        </div>
-
-        <div ref={listRef} className="max-h-[55vh] overflow-y-auto py-8 px-8 hide-scrollbar">
+        <div ref={listRef} className={`overflow-y-auto py-6 sm:py-8 px-4 sm:px-8 hide-scrollbar ${isFullscreen ? 'max-h-[74vh]' : 'max-h-[55vh]'}`}>
           <div className="space-y-1">
             {syncedLyrics.map((line, index) => {
               const active = index === currentLine;
@@ -232,23 +280,15 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
                     ${active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.03]'}
                   `}
                 >
-                  <div className="flex items-baseline gap-3">
-                    <span className={`text-[11px] font-mono flex-shrink-0 w-14 transition-colors duration-300 ${
-                      active ? 'text-[--accent]' : past ? 'text-white/15' : 'text-white/20'
-                    }`}>
-                      {formatTime(line.time)}
-                    </span>
-
-                    <span className={`transition-all duration-500 ease-out leading-relaxed ${
-                      active
-                        ? 'text-white text-xl md:text-2xl font-semibold'
-                        : past
-                          ? 'text-white/20 text-base md:text-lg'
-                          : 'text-white/35 text-base md:text-lg'
-                    }`}>
-                      {line.text || '\u00A0'}
-                    </span>
-                  </div>
+                  <span className={`block transition-all duration-500 ease-out leading-relaxed ${
+                    active
+                      ? 'text-white text-[1.18rem] sm:text-xl md:text-2xl font-semibold'
+                      : past
+                        ? 'text-white/20 text-[0.98rem] sm:text-base md:text-lg'
+                        : 'text-white/35 text-[0.98rem] sm:text-base md:text-lg'
+                  }`}>
+                    {line.text || '\u00A0'}
+                  </span>
                 </div>
               );
             })}
@@ -260,20 +300,6 @@ export default function AppleLyricPlayer({ syncedLyrics, lrcRaw, audioUrl }: App
         <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-[rgb(13,13,18)] to-transparent pointer-events-none z-10 rounded-t-[24px]" />
         <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[rgb(13,13,18)] to-transparent pointer-events-none z-10" />
       </div>
-
-      {lrcRaw && (
-        <div className="px-8 py-4 border-t border-white/[0.06]">
-          <details className="group">
-            <summary className="cursor-pointer text-[13px] text-white/30 hover:text-white/50 transition-colors flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 transform group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-              Voir le LRC brut
-            </summary>
-            <pre className="mt-3 text-[11px] text-white/25 bg-white/[0.03] p-4 rounded-[12px] overflow-x-auto font-mono leading-relaxed">{lrcRaw}</pre>
-          </details>
-        </div>
-      )}
     </div>
   );
 }
