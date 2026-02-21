@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { deleteSongById, fetchLrcBySongId, fetchSongById, fetchRelatedSongs, fetchUserRole, saveSongLrcCorrection, updateSongMetadata } from '@/lib/supabaseData';
+import { deleteSongById, fetchLrcBySongId, fetchSongById, fetchRelatedSongs, fetchUserRole, saveSongLrcCorrection, trackSongPlay, trackSongVisit, updateSongMetadata } from '@/lib/supabaseData';
 import { isSupabaseAudioStorageEnabled, tryFindSongAudioUrlInStorage } from '@/lib/audioStorage';
 import type { Song, LrcFile } from '@/types';
 import AppleLyricPlayer from '@/components/AppleLyricPlayer';
@@ -41,6 +41,14 @@ export default function SongDetailPage() {
   const [metadataCollaborations, setMetadataCollaborations] = useState('');
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!songId || typeof window === 'undefined') return;
+    const visitKey = `song-visit-tracked:${songId}`;
+    if (window.sessionStorage.getItem(visitKey)) return;
+    window.sessionStorage.setItem(visitKey, '1');
+    void trackSongVisit(songId);
+  }, [songId]);
 
   useEffect(() => {
     const load = async () => {
@@ -393,7 +401,14 @@ export default function SongDetailPage() {
               </div>
 
               {syncedLyrics.length > 0 ? (
-                <AppleLyricPlayer syncedLyrics={syncedLyrics} lrcRaw={lrc?.lrc_raw} audioUrl={song.audio_url} />
+                <AppleLyricPlayer
+                  syncedLyrics={syncedLyrics}
+                  lrcRaw={lrc?.lrc_raw}
+                  audioUrl={song.audio_url}
+                  onFirstPlay={() => {
+                    void trackSongPlay(song.id);
+                  }}
+                />
               ) : (
                 <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-12 text-center">
                   <p className="text-white/40 text-[15px] mb-2">Aucun LRC synchronisé pour cette chanson.</p>

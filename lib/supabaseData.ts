@@ -318,3 +318,23 @@ export async function fetchUserRole() {
     .maybeSingle();
   return data?.role || null;
 }
+
+export async function trackSongVisit(songId: string) {
+  return supabase.rpc('track_song_metric', {
+    p_song_id: songId,
+    p_metric: 'visit',
+  });
+}
+
+export async function trackSongPlay(songId: string) {
+  return supabase.rpc('track_song_metric', {
+    p_song_id: songId,
+    p_metric: 'play',
+  });
+}
+
+export async function fetchAdminSongStats(limit = 100) {
+  return supabase.rpc('admin_song_stats', {
+    p_limit: limit,
+  });
+}

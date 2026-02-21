@@ -6,21 +6,42 @@ import { supabase } from '@/lib/supabaseClient';
 
 export default function AuthStatus() {
   const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+
+    const loadRole = async (userId: string | null | undefined) => {
+      if (!mounted) return;
+      if (!userId) {
+        setRole(null);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (!mounted) return;
+      setRole(data?.role ?? null);
+    };
+
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
       setEmail(data.user?.email ?? null);
+      await loadRole(data.user?.id);
       setLoading(false);
     };
     getUser();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user?.email ?? null);
+      void loadRole(session?.user?.id);
     });
 
     return () => {
@@ -87,6 +108,15 @@ export default function AuthStatus() {
               >
                 Importer un LRC
               </Link>
+              {role === 'admin' && (
+                <Link
+                  href="/admin/stats"
+                  onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-2 text-[13px] text-[--text-primary] hover:bg-black/[0.04] transition-colors"
+                >
+                  Stats admin
+                </Link>
+              )}
             </div>
             <div className="py-1 border-t border-black/[0.06]">
               <button

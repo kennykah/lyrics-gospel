@@ -50,3 +50,12 @@ export interface Artist {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface AdminSongStatsRow {
+  song_id: string;
+  title: string;
+  artist_name: string;
+  visit_count: number;
+  play_count: number;
+  last_activity: string;
+}

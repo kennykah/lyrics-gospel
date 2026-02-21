@@ -7,9 +7,10 @@ interface AppleLyricPlayerProps {
   syncedLyrics: SyncedLine[];
   lrcRaw?: string;
   audioUrl?: string | null;
+  onFirstPlay?: () => void;
 }
 
-export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricPlayerProps) {
+export default function AppleLyricPlayer({ syncedLyrics, audioUrl, onFirstPlay }: AppleLyricPlayerProps) {
   const [audioError, setAudioError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -17,11 +18,13 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
   const [audioReady, setAudioReady] = useState(false);
   const [localObjectUrl, setLocalObjectUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isImmersiveFullscreen, setIsImmersiveFullscreen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Array<HTMLDivElement | null>>([]);
   const playerRef = useRef<HTMLDivElement>(null);
+  const hasTrackedPlayRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -47,7 +50,13 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
       setDuration(audio.duration);
       setAudioReady(true);
     };
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      if (!hasTrackedPlayRef.current) {
+        hasTrackedPlayRef.current = true;
+        onFirstPlay?.();
+      }
+    };
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
       setIsPlaying(false);
@@ -78,7 +87,7 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleAudioError);
     };
-  }, [effectiveAudioSrc]);
+  }, [effectiveAudioSrc, onFirstPlay]);
 
   const currentLine = useMemo(() => {
     if (!syncedLyrics.length) return -1;
@@ -92,8 +101,12 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
   useEffect(() => {
     if (currentLine < 0) return;
     const el = lineRefs.current[currentLine];
-    if (el && listRef.current) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const list = listRef.current;
+    if (el && list) {
+      const targetTop = el.offsetTop + (el.offsetHeight / 2) - (list.clientHeight / 2);
+      const maxTop = Math.max(0, list.scrollHeight - list.clientHeight);
+      const clampedTop = Math.max(0, Math.min(targetTop, maxTop));
+      list.scrollTo({ top: clampedTop, behavior: 'smooth' });
     }
   }, [currentLine]);
 
@@ -155,15 +168,29 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
   };
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const isExpanded = isFullscreen || isImmersiveFullscreen;
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === playerRef.current);
+      const nativeFullscreen = document.fullscreenElement === playerRef.current;
+      setIsFullscreen(nativeFullscreen);
+      if (!nativeFullscreen) {
+        setIsImmersiveFullscreen(false);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!isImmersiveFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isImmersiveFullscreen]);
 
   const toggleFullscreen = async () => {
     const element = playerRef.current;
@@ -183,8 +210,25 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
       return;
     }
 
-    if (!element.requestFullscreen) return;
-    await element.requestFullscreen();
+    if (isImmersiveFullscreen) {
+      setIsImmersiveFullscreen(false);
+      if (orientation?.unlock) {
+        orientation.unlock();
+      }
+      return;
+    }
+
+    const canRequestFullscreen = typeof element.requestFullscreen === 'function';
+
+    if (canRequestFullscreen) {
+      try {
+        await element.requestFullscreen();
+      } catch {
+        setIsImmersiveFullscreen(true);
+      }
+    } else {
+      setIsImmersiveFullscreen(true);
+    }
 
     if (orientation?.lock) {
       try {
@@ -195,7 +239,12 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
   };
 
   return (
-    <div ref={playerRef} className={`rounded-[24px] bg-white/[0.04] border border-white/[0.06] overflow-hidden ${isFullscreen ? 'bg-[#0d0d12]' : ''}`}>
+    <div
+      ref={playerRef}
+      className={`rounded-[24px] bg-white/[0.04] border border-white/[0.06] overflow-hidden ${isExpanded ? 'bg-[#0d0d12]' : ''} ${
+        isImmersiveFullscreen ? 'fixed inset-0 z-[120] rounded-none border-0' : ''
+      }`}
+    >
       <audio ref={audioRef} preload="metadata" className="hidden" />
 
       {!effectiveAudioSrc ? (
@@ -223,7 +272,7 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
               onClick={toggleFullscreen}
               className="text-[11px] text-white/35 hover:text-white/60 transition-colors mr-3"
             >
-              {isFullscreen ? 'Quitter plein écran' : 'Plein écran'}
+              {isExpanded ? 'Quitter plein écran' : 'Plein écran'}
             </button>
             <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} className="text-[11px] text-white/35 hover:text-white/60 transition-colors">
@@ -262,7 +311,7 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl }: AppleLyricP
       )}
 
       <div className="relative">
-        <div ref={listRef} className={`overflow-y-auto py-6 sm:py-8 px-4 sm:px-8 hide-scrollbar ${isFullscreen ? 'max-h-[74vh]' : 'max-h-[55vh]'}`}>
+        <div ref={listRef} className={`overflow-y-auto py-6 sm:py-8 px-4 sm:px-8 hide-scrollbar ${isExpanded ? 'max-h-[74vh]' : 'max-h-[55vh]'}`}>
           <div className="space-y-1">
             {syncedLyrics.map((line, index) => {
               const active = index === currentLine;
