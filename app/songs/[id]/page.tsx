@@ -1,15 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fetchLrcBySongId, fetchSongById, fetchRelatedSongs, saveSongLrcCorrection } from '@/lib/supabaseData';
+import { deleteSongById, fetchLrcBySongId, fetchSongById, fetchRelatedSongs, fetchUserRole, saveSongLrcCorrection } from '@/lib/supabaseData';
+import { isSupabaseAudioStorageEnabled, tryFindSongAudioUrlInStorage } from '@/lib/audioStorage';
 import type { Song, LrcFile } from '@/types';
 import AppleLyricPlayer from '@/components/AppleLyricPlayer';
 import { slugifyArtistName } from '@/utils/artistSlug';
 import { extractPlainLyrics, generateLrc, parseLrc } from '@/utils/lrcParser';
 
+function isLikelyDirectAudioUrl(url?: string | null) {
+  if (!url) return false;
+  if (url.startsWith('local://')) return false;
+  if (!/^https?:\/\//i.test(url)) return false;
+  return /(\.mp3|\.wav|\.m4a|\.ogg|\.flac|\.aac|\.webm)(\?|$)/i.test(url);
+}
+
 export default function SongDetailPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const songId = params?.id as string;
   const [song, setSong] = useState<Song | null>(null);
@@ -24,6 +33,8 @@ export default function SongDetailPage() {
   const [lrcDraft, setLrcDraft] = useState('');
   const [savingLrc, setSavingLrc] = useState(false);
   const [lrcEditMessage, setLrcEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [deletingSong, setDeletingSong] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -34,14 +45,31 @@ export default function SongDetailPage() {
         fetchLrcBySongId(songId),
       ]);
       const songData = songRes.data as Song;
-      setSong(songData);
+
+      let resolvedSong = songData;
+      const hasPersistentAudio = isLikelyDirectAudioUrl(songData?.audio_url);
+      if (songData && !hasPersistentAudio && isSupabaseAudioStorageEnabled()) {
+        const fallbackAudioUrl = await tryFindSongAudioUrlInStorage({
+          title: songData.title,
+          artist: songData.artist_name,
+          slug: songData.slug,
+        });
+        if (fallbackAudioUrl) {
+          resolvedSong = { ...songData, audio_url: fallbackAudioUrl };
+        }
+      }
+
+      setSong(resolvedSong);
       setLrc(lrcRes.data as LrcFile);
 
       // Fetch related after we have artist name
-      if (songData) {
-        const relRes = await fetchRelatedSongs(songId, songData.artist_name, 4);
+      if (resolvedSong) {
+        const relRes = await fetchRelatedSongs(songId, resolvedSong.artist_name, 4);
         setRelated((relRes.data as Song[]) || []);
       }
+
+      const role = await fetchUserRole();
+      setUserRole(role);
       setLoading(false);
     };
     if (songId) load();
@@ -115,7 +143,7 @@ export default function SongDetailPage() {
   };
 
   const handleStartLrcEdit = () => {
-    if (!song || syncedLyrics.length === 0) return;
+    if (!song || syncedLyrics.length === 0 || userRole !== 'admin') return;
 
     const initialLrc = lrc?.lrc_raw?.trim()
       ? lrc.lrc_raw
@@ -132,7 +160,7 @@ export default function SongDetailPage() {
   };
 
   const handleSaveLrcCorrection = async () => {
-    if (!song) return;
+    if (!song || userRole !== 'admin') return;
     const nextRaw = lrcDraft.trim();
     const parsed = parseLrc(nextRaw);
 
@@ -182,6 +210,22 @@ export default function SongDetailPage() {
     setLrcEditMessage({ type: 'success', text: 'Correction enregistrée avec succès.' });
     setSavingLrc(false);
     setIsEditingLrc(false);
+  };
+
+  const handleDeleteSong = async () => {
+    if (!song || userRole !== 'admin') return;
+    const confirmed = window.confirm(`Supprimer la chanson "${song.title}" ? Cette action est irréversible.`);
+    if (!confirmed) return;
+
+    setDeletingSong(true);
+    const { error } = await deleteSongById(song.id);
+    if (error) {
+      setLrcEditMessage({ type: 'error', text: error.message || 'Suppression impossible.' });
+      setDeletingSong(false);
+      return;
+    }
+
+    router.push('/songs');
   };
 
   const statusLabel: Record<string, string> = {
@@ -286,9 +330,8 @@ export default function SongDetailPage() {
                 </div>
               </div>
 
-              {/* Lyric player */}
               {syncedLyrics.length > 0 ? (
-                <AppleLyricPlayer syncedLyrics={syncedLyrics} lrcRaw={lrc?.lrc_raw} />
+                <AppleLyricPlayer syncedLyrics={syncedLyrics} lrcRaw={lrc?.lrc_raw} audioUrl={song.audio_url} />
               ) : (
                 <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-12 text-center">
                   <p className="text-white/40 text-[15px] mb-2">Aucun LRC synchronisé pour cette chanson.</p>
@@ -489,13 +532,30 @@ export default function SongDetailPage() {
                     Partager les paroles sur WhatsApp
                   </button>
 
-                  <button
-                    onClick={handleStartLrcEdit}
-                    disabled={syncedLyrics.length === 0}
-                    className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-medium text-white/70 transition-colors sm:col-span-2"
-                  >
-                    Corriger l’orthographe du LRC
-                  </button>
+                  {userRole === 'admin' && (
+                    <>
+                      <button
+                        onClick={handleStartLrcEdit}
+                        disabled={syncedLyrics.length === 0}
+                        className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-medium text-white/70 transition-colors sm:col-span-2"
+                      >
+                        Corriger l’orthographe du LRC
+                      </button>
+                      <Link
+                        href={`/sync?songId=${song.id}`}
+                        className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-white/70 transition-colors inline-flex items-center justify-center sm:col-span-2"
+                      >
+                        Modifier la synchronisation
+                      </Link>
+                      <button
+                        onClick={handleDeleteSong}
+                        disabled={deletingSong}
+                        className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-semibold text-white/70 transition-colors sm:col-span-2"
+                      >
+                        {deletingSong ? 'Suppression...' : 'Supprimer cette chanson (admin)'}
+                      </button>
+                    </>
+                  )}
                 </div>
                 {lrcEditMessage && (
                   <p className={`mt-3 text-[12px] ${lrcEditMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>

@@ -1,4 +1,4 @@
-Gospel Lyrics is a Next.js 16 App Router project for synchronized lyrics (LRC). It uses Supabase for auth + database, and keeps audio upload client-side only (temporary, no storage).
+Gospel Lyrics is a Next.js 16 App Router project for synchronized lyrics (LRC). It uses Supabase for auth + database, with local audio by default and optional Supabase Storage audio mode for testing.
 
 ## Getting Started
 
@@ -20,6 +20,8 @@ Create `.env.local` from `.env.example` and set your Supabase credentials:
 ```
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_ENABLE_SUPABASE_AUDIO_STORAGE=false
+NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET=song-audio
 ```
 
 ## Supabase SQL Scripts
@@ -41,9 +43,28 @@ If you hit schema mismatch errors, run the repair script:
 
 - `supabase/repair.sql`
 
-## Audio Upload (Temporary)
+To enable audio upload to Supabase Storage, run:
 
-Audio is handled client-side for preview/synchronization only. No storage bucket is required.
+- `supabase/storage_audio.sql`
+
+## Audio Upload Modes
+
+By default (`NEXT_PUBLIC_ENABLE_SUPABASE_AUDIO_STORAGE=false`), audio stays local-only for sync preview.
+
+To test persisted audio playback:
+- set `NEXT_PUBLIC_ENABLE_SUPABASE_AUDIO_STORAGE=true`
+- run `supabase/storage_audio.sql`
+- keep `NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET=song-audio` (or match your bucket name)
+
+Behavior with storage enabled:
+- `/sync` keeps local preview UX while editing,
+- on final save, the audio file uploads to Supabase Storage,
+- song detail page reuses `songs.audio_url` automatically (no re-upload needed).
+
+Rollback (safe):
+- set `NEXT_PUBLIC_ENABLE_SUPABASE_AUDIO_STORAGE=false`
+- restart `npm run dev`
+- app returns to local audio mode without schema rollback.
 
 ## Supabase Auth
 

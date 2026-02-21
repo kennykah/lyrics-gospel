@@ -4,26 +4,53 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { generateLrc, type SyncedLine } from '@/utils/lrcParser';
 
 interface LyricEditorProps {
-  onSave: (lrcContent: string, synced: SyncedLine[]) => void;
+  onSave: (lrcContent: string, synced: SyncedLine[], audioFile: File | null, audioUrl: string | null) => void;
   onCancel: () => void;
+  initialLyrics?: string;
+  initialSyncedLyrics?: SyncedLine[];
+  isEditMode?: boolean;
+  initialAudioUrl?: string | null;
 }
 
 type EditorStep = 'upload' | 'lyrics' | 'sync' | 'review';
 
-export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
+export default function LyricEditor({
+  onSave,
+  onCancel,
+  initialLyrics = '',
+  initialSyncedLyrics = [],
+  isEditMode = false,
+  initialAudioUrl = null,
+}: LyricEditorProps) {
   // ── State ──
   const [step, setStep] = useState<EditorStep>('upload');
-  const [lyrics, setLyrics] = useState('');
-  const [timestamps, setTimestamps] = useState<number[]>([]);
+  const [lyrics, setLyrics] = useState(initialLyrics);
+  const [timestamps, setTimestamps] = useState<number[]>(initialSyncedLyrics.map((line) => line.time || 0));
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(initialAudioUrl);
   const [audioError, setAudioError] = useState('');
   const [glowActive, setGlowActive] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
   const [history, setHistory] = useState<number[][]>([]);
+
+  useEffect(() => {
+    setAudioUrl(initialAudioUrl || null);
+  }, [initialAudioUrl]);
+
+  useEffect(() => {
+    if (initialSyncedLyrics.length > 0) {
+      setLyrics(initialSyncedLyrics.map((line) => line.text).join('\n'));
+      setTimestamps(initialSyncedLyrics.map((line) => line.time || 0));
+      return;
+    }
+
+    setLyrics(initialLyrics);
+    setTimestamps([]);
+  }, [initialLyrics, initialSyncedLyrics]);
 
   // ── Refs ──
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -43,22 +70,45 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
     return idx === -1 ? totalCount : idx;
   }, [timestamps, totalCount]);
 
+  const playbackActiveIndex = useMemo(() => {
+    if (step !== 'sync') return -1;
+    let idx = -1;
+    for (let i = 0; i < timestamps.length; i += 1) {
+      const timestamp = timestamps[i];
+      if (timestamp > 0 && timestamp <= currentTime) {
+        idx = i;
+      }
+    }
+    return idx;
+  }, [step, timestamps, currentTime]);
+
+  const syncTargetIndex = useMemo(() => {
+    if (nextUnsyncedIndex < totalCount) return nextUnsyncedIndex;
+    return Math.max(0, totalCount - 1);
+  }, [nextUnsyncedIndex, totalCount]);
+
   // Current active line during sync
   const activeIndex = useMemo(() => {
     if (step !== 'sync') return -1;
-    return nextUnsyncedIndex < totalCount ? nextUnsyncedIndex : totalCount - 1;
-  }, [step, nextUnsyncedIndex, totalCount]);
+    if (isEditMode) return playbackActiveIndex >= 0 ? playbackActiveIndex : syncTargetIndex;
+    return syncTargetIndex;
+  }, [step, isEditMode, playbackActiveIndex, syncTargetIndex]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const allSynced = syncedCount === totalCount && totalCount > 0;
+  const showCompletedState = allSynced && !isEditMode;
 
   // ── Audio setup ──
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !audioFile) return;
+    if (!audio) return;
 
-    const objectUrl = URL.createObjectURL(audioFile);
-    audio.src = objectUrl;
+    const remoteUrl = audioUrl?.startsWith('http') ? audioUrl : null;
+    const objectUrl = audioFile ? URL.createObjectURL(audioFile) : null;
+    const source = objectUrl || remoteUrl;
+    if (!source) return;
+
+    audio.src = source;
     audio.load();
 
     const updateTime = () => setCurrentTime(audio.currentTime);
@@ -74,14 +124,14 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
     audio.addEventListener('ended', handleEnded);
 
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioFile]);
+  }, [audioFile, audioUrl]);
 
   // ── Auto-scroll to active line ──
   useEffect(() => {
@@ -130,7 +180,23 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
       return;
     }
     setAudioFile(file);
+    setAudioUrl(null);
     setAudioError('');
+    setCurrentTime(0);
+
+    if (initialSyncedLyrics.length > 0) {
+      setHistory([]);
+      setStep('sync');
+      setTimeout(() => {
+        const audio = audioRef.current;
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play();
+        }
+      }, 250);
+      return;
+    }
+
     setStep('lyrics');
   };
 
@@ -140,7 +206,9 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
     setTimestamps(new Array(parsedLines.length).fill(0));
     setHistory([]);
     setStep('sync');
-    // Auto-play audio
+    setCurrentTime(0);
+
+    // Auto-play audio (local mode)
     setTimeout(() => {
       const audio = audioRef.current;
       if (audio) {
@@ -263,10 +331,11 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
       text: line,
     }));
     const lrcContent = generateLrc(syncedLyrics);
-    onSave(lrcContent, syncedLyrics);
+    onSave(lrcContent, syncedLyrics, audioFile, audioUrl);
   };
 
   const goToReview = () => {
+    setIsPlaying(false);
     if (audioRef.current) audioRef.current.pause();
     setStep('review');
   };
@@ -277,6 +346,7 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
 
   const goBackToLyrics = () => {
     setStep('lyrics');
+    setIsPlaying(false);
     if (audioRef.current) audioRef.current.pause();
   };
 
@@ -360,6 +430,31 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
               </svg>
               Choisir un fichier audio
             </button>
+            {audioUrl?.startsWith('http') && (
+              <button
+                onClick={() => {
+                  setAudioFile(null);
+                  setAudioError('');
+                  setCurrentTime(0);
+                  if (initialSyncedLyrics.length > 0) {
+                    setHistory([]);
+                    setStep('sync');
+                  } else {
+                    setStep('lyrics');
+                  }
+                  setTimeout(() => {
+                    const audio = audioRef.current;
+                    if (audio) {
+                      audio.currentTime = 0;
+                      audio.play();
+                    }
+                  }, 250);
+                }}
+                className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl bg-white/[0.06] text-white/70 font-semibold text-[15px] border border-white/[0.1] hover:bg-white/[0.1] transition-all"
+              >
+                Utiliser l&apos;audio déjà enregistré
+              </button>
+            )}
             <button
               onClick={onCancel}
               className="px-5 py-3.5 rounded-2xl bg-white/[0.06] text-white/50 font-medium text-[15px] border border-white/[0.08] hover:bg-white/[0.1] hover:text-white/70 transition-all"
@@ -375,6 +470,7 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
               <p className="text-red-400 text-[13px]">{audioError}</p>
             </div>
           )}
+
         </div>
       )}
 
@@ -390,10 +486,10 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium text-green-400">Audio chargé</p>
-              <p className="text-[11px] text-white/30 truncate">{audioFile?.name}</p>
+              <p className="text-[11px] text-white/30 truncate">{audioFile?.name || 'Audio enregistré (Supabase)'}</p>
             </div>
             <button
-              onClick={() => { setStep('upload'); setAudioFile(null); }}
+              onClick={() => { setStep('upload'); setAudioFile(null); setAudioUrl(null); }}
               className="text-[11px] text-white/30 hover:text-white/60 transition-colors"
             >
               Changer
@@ -453,6 +549,12 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
         <div className="flex flex-col">
           {/* ── Compact audio player ── */}
           <div className="px-6 py-3 border-b border-white/[0.08] bg-white/[0.02]">
+            {isEditMode && (
+              <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[--accent]/12 border border-[--accent]/25 text-[11px] font-medium text-[--accent]">
+                Mode édition de synchronisation
+              </div>
+            )}
+
             <div className="flex items-center gap-4">
               {/* Play/Pause */}
               <button
@@ -537,31 +639,31 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
             <div className="flex flex-col border-r border-white/[0.06]">
               {/* Current line highlight */}
               <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
-                {!allSynced ? (
+                {!showCompletedState ? (
                   <>
                     {/* Previous synced line (faded) */}
-                    {nextUnsyncedIndex > 0 && (
+                    {activeIndex > 0 && (
                       <p className="text-[14px] text-white/20 mb-4 text-center max-w-lg leading-relaxed">
-                        {lines[nextUnsyncedIndex - 1]}
+                        {lines[activeIndex - 1]}
                       </p>
                     )}
 
                     {/* CURRENT LINE (big, glowing) */}
                     <div className={`text-center transition-all duration-200 ${glowActive ? 'scale-[1.02]' : ''}`}>
                       <p className="text-[11px] uppercase tracking-widest text-[--accent]/60 font-semibold mb-2">
-                        Ligne {nextUnsyncedIndex + 1} sur {totalCount}
+                        Ligne {activeIndex + 1} sur {totalCount}
                       </p>
                       <p className={`text-2xl md:text-3xl font-bold text-white leading-snug max-w-lg transition-all ${
                         glowActive ? 'text-[--accent] drop-shadow-[0_0_20px_rgba(108,92,231,0.5)]' : ''
                       }`}>
-                        {lines[nextUnsyncedIndex]}
+                        {lines[activeIndex] || '—'}
                       </p>
                     </div>
 
                     {/* Next line preview */}
-                    {nextUnsyncedIndex < totalCount - 1 && (
+                    {activeIndex >= 0 && activeIndex < totalCount - 1 && (
                       <p className="text-[14px] text-white/20 mt-6 text-center max-w-lg leading-relaxed">
-                        {lines[nextUnsyncedIndex + 1]}
+                        {lines[activeIndex + 1]}
                       </p>
                     )}
 
@@ -721,11 +823,24 @@ export default function LyricEditor({ onSave, onCancel }: LyricEditorProps) {
                         </span>
 
                         {/* Lyric text */}
-                        <span className={`text-[12px] truncate ${
+                        <span className={`text-[12px] truncate flex-1 min-w-0 ${
                           active && !synced ? 'text-white font-medium' : synced ? 'text-white/45' : 'text-white/25'
                         }`}>
                           {line}
                         </span>
+
+                        {synced && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleClearLine(index); }}
+                            className="w-5 h-5 rounded-md bg-white/[0.06] text-white/35 hover:text-white/75 hover:bg-white/[0.14] transition-colors flex items-center justify-center"
+                            title="Supprimer la synchronisation de cette ligne"
+                            aria-label={`Supprimer la synchronisation de la ligne ${index + 1}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
 
                       {/* Expanded controls for selected line */}

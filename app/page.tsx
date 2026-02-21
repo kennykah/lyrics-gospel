@@ -122,6 +122,11 @@ export default function Home() {
 
         {/* Hero content */}
         <div className="relative z-10 text-center px-4 sm:px-6 max-w-4xl mx-auto pt-16">
+          <div className="animate-fade-in-up inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/[0.08] border border-white/[0.12] backdrop-blur-sm mb-6">
+            <img src="/branding/logo-mark.svg" alt="Logo Gospel Lyrics" className="w-5 h-5 rounded-[6px]" />
+            <span className="text-[12px] font-medium text-white/70">Gospel Lyrics</span>
+          </div>
+
           {/* Pill badge */}
           <div className="animate-fade-in-up inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] backdrop-blur-sm mb-8">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />

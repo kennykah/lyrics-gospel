@@ -3,7 +3,7 @@
 ## Résumé rapide
 - **Objectif** : plateforme de paroles gospel synchronisées (LRC) avec import, éditeur tap‑to‑sync style Musixmatch et lecteur synchronisé style Apple Music.
 - **Stack** : Next.js 16.1.6 (App Router), React 19, TypeScript 5, Tailwind CSS 4, Supabase (DB + Auth + RLS).
-- **Audio** : **temporaire côté client** (aucun stockage serveur).
+- **Audio** : mode local par défaut + mode test Supabase Storage activable via `NEXT_PUBLIC_ENABLE_SUPABASE_AUDIO_STORAGE`.
 - **Repo** : `https://github.com/kennykah/lyrics-gospel.git`
 
 ---
@@ -14,6 +14,7 @@
 - ✅ Import LRC + preview audio local.
 - ✅ Éditeur tap‑to‑sync Musixmatch‑style (flux 4 étapes : Audio → Paroles → Synchro → Aperçu).
 - ✅ Contrôles de synchronisation avancés : annuler (undo), recommencer, modifier paroles, ajuster ±0.1s, re-sync ligne, effacer timing.
+- ✅ Suppression rapide d'une ligne synchronisée via croix (✕) directement dans la liste des lignes.
 - ✅ Raccourcis clavier (Espace = sync, ⌫/Ctrl+Z = annuler, ←→ = ±5s).
 - ✅ Génération et sauvegarde LRC dans Supabase (`songs` + `lrc_files`).
 - ✅ Actions paroles sur page chanson : téléchargement `.lrc`, copie des paroles sans timestamps, partage du texte via WhatsApp.
@@ -23,6 +24,7 @@
 ### Authentification
 - ✅ Auth Supabase (login / signup par email).
 - ✅ AuthGuard — protection des pages contributeur.
+- ✅ Verrouillage édition en mode admin-only (`/sync`, `/upload`, correction/suppression).
 - ✅ AuthStatus dans le header.
 - ✅ RLS (public optionnel pour dev, restrictif pour prod).
 
@@ -39,6 +41,7 @@
 ### UI/UX
 - ✅ Design system Apple HIG (tokens CSS, glass morphism, squircles, transitions spring).
 - ✅ Header adaptatif (mode clair/sombre selon la page, effet glass au scroll).
+- ✅ Branding visuel : logo intégré + bandeau d'images défilantes dans le Hero.
 - ✅ Recherche Spotlight globale (⌘K / Ctrl+K).
 - ✅ Lien actif dans la navigation.
 - ✅ Accessibilité de base (ARIA labels, focus-visible, prefers-reduced-motion).
@@ -48,6 +51,9 @@
 ### Admin
 - ✅ Toggle artiste mis en avant (depuis la page artiste, rôle admin requis).
 - ✅ Fonction `fetchUserRole()` pour détection admin.
+- ✅ Édition d'une synchronisation existante (admin) via `/sync?songId=...`.
+- ✅ Suppression d'une chanson (admin) depuis la page détail chanson.
+- ✅ Suppression d'un artiste avec toutes ses chansons (admin) depuis la page artiste.
 
 ---
 
@@ -96,9 +102,11 @@
 | `supabase/rls.sql` | RLS de base |
 | `supabase/rls_public.sql` | RLS ouvert (dev/beta) |
 | `supabase/rls_restrict.sql` | RLS strict (prod) |
+| `supabase/rls_admin_actions.sql` | Verrouillage édition admin-only (songs/lrc insert/update/delete) |
 | `supabase/repair.sql` | Corrections rapides |
 | `supabase/patch_audio_url.sql` | audio_url optionnel |
 | `supabase/patch_submitted_by.sql` | submitted_by col |
+| `supabase/admin_actions.sql` | Fonction RPC `admin_delete_artist_with_songs` |
 
 ---
 

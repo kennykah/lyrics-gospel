@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export default function UploadPage() {
   return (
-    <AuthGuard>
+    <AuthGuard requireAdmin>
     <div className="min-h-screen pt-[52px] bg-[--background]">
       <div className="max-w-[800px] mx-auto px-6 py-10">
         {/* Breadcrumb */}

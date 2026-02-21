@@ -11,12 +11,13 @@ export async function getCurrentUserId() {
 export async function createSong(params: {
   title: string;
   artist_name: string;
+  audio_url?: string | null;
   lyrics_text?: string | null;
   created_by?: string | null;
   submitted_by?: string | null;
 }) {
   const slug = `${slugify(params.title)}-${Date.now()}`;
-  const audioUrl = 'local://temp-audio';
+  const audioUrl = params.audio_url?.trim() || 'local://temp-audio';
   return supabase
     .from('songs')
     .insert({
@@ -102,6 +103,59 @@ export async function saveSongLrcCorrection(params: {
   }
 
   return { data: lrcResult.data, error: null };
+}
+
+export async function updateSongWithLrc(params: {
+  songId: string;
+  title: string;
+  artist_name: string;
+  audio_url?: string | null;
+  lrcRaw: string;
+  syncedLyrics: SyncedLine[];
+}) {
+  const plainLyrics = params.syncedLyrics
+    .map((line) => line.text?.trim())
+    .filter(Boolean)
+    .join('\n');
+
+  const songResult = await supabase
+    .from('songs')
+    .update({
+      title: params.title,
+      artist_name: params.artist_name,
+      audio_url: params.audio_url?.trim() || 'local://temp-audio',
+      lyrics_text: plainLyrics,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.songId)
+    .select()
+    .single();
+
+  if (songResult.error) return { data: null, error: songResult.error };
+
+  const lrcResult = await saveSongLrcCorrection({
+    songId: params.songId,
+    lrcRaw: params.lrcRaw,
+    syncedLyrics: params.syncedLyrics,
+    plainLyrics,
+  });
+
+  if (lrcResult.error) return { data: null, error: lrcResult.error };
+  return { data: songResult.data, error: null };
+}
+
+export async function deleteSongById(songId: string) {
+  return supabase
+    .from('songs')
+    .delete()
+    .eq('id', songId);
+}
+
+export async function deleteArtistWithSongs(params: { artistId?: string; artistName: string }) {
+  return supabase.rpc('admin_delete_artist_with_songs', {
+    p_artist_id: params.artistId ?? null,
+    p_artist_name: params.artistName,
+  });
 }
 
 export async function fetchSongs(params: { page: number; pageSize: number; query?: string }) {

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists } from '@/lib/supabaseData';
+import { useParams, useRouter } from 'next/navigation';
+import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists } from '@/lib/supabaseData';
 import type { Artist, Song } from '@/types';
 import { slugifyArtistName } from '@/utils/artistSlug';
 
@@ -70,6 +70,7 @@ const socialIcons: Record<string, { label: string; icon: React.ReactNode }> = {
 };
 
 export default function ArtistDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const slug = params.id as string;
 
@@ -81,6 +82,7 @@ export default function ArtistDetailPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [featureToggling, setFeatureToggling] = useState(false);
   const [isVirtualArtist, setIsVirtualArtist] = useState(false);
+  const [deletingArtist, setDeletingArtist] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -151,6 +153,26 @@ export default function ArtistDetailPage() {
     const res = await fetchArtistBySlug(slug);
     if (res.data) setArtist(res.data as Artist);
     setFeatureToggling(false);
+  };
+
+  const handleDeleteArtistWithSongs = async () => {
+    if (!artist || userRole !== 'admin') return;
+
+    const confirmed = window.confirm(`Supprimer ${artist.name} et toutes ses chansons ? Cette action est irréversible.`);
+    if (!confirmed) return;
+
+    setDeletingArtist(true);
+    const { error } = await deleteArtistWithSongs({
+      artistId: isVirtualArtist ? undefined : artist.id,
+      artistName: artist.name,
+    });
+
+    if (error) {
+      setDeletingArtist(false);
+      return;
+    }
+
+    router.push('/artists');
   };
 
   const latestSong = songs[0];
@@ -252,14 +274,25 @@ export default function ArtistDetailPage() {
               </div>
 
               {/* Admin controls */}
-              {userRole === 'admin' && !isVirtualArtist && (
-                <button
-                  onClick={handleToggleFeatured}
-                  disabled={featureToggling}
-                  className="mt-4 px-4 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-white/60 text-[12px] font-medium transition-colors disabled:opacity-30"
-                >
-                  {featureToggling ? '...' : artist.is_featured ? 'Retirer la mise en avant' : '⭐ Mettre en avant'}
-                </button>
+              {userRole === 'admin' && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {!isVirtualArtist && (
+                    <button
+                      onClick={handleToggleFeatured}
+                      disabled={featureToggling}
+                      className="px-4 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-white/60 text-[12px] font-medium transition-colors disabled:opacity-30"
+                    >
+                      {featureToggling ? '...' : artist.is_featured ? 'Retirer la mise en avant' : '⭐ Mettre en avant'}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleDeleteArtistWithSongs}
+                    disabled={deletingArtist}
+                    className="px-4 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-white/60 text-[12px] font-medium transition-colors disabled:opacity-30"
+                  >
+                    {deletingArtist ? 'Suppression...' : 'Supprimer artiste + chansons'}
+                  </button>
+                </div>
               )}
             </div>
           </div>

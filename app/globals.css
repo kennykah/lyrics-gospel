@@ -247,6 +247,11 @@ input[type="range"].slider-light::-webkit-slider-thumb {
   50% { transform: translateY(-6px); }
 }
 
+@keyframes marqueeScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.6s var(--ease-apple) both;
 }
@@ -265,6 +270,55 @@ input[type="range"].slider-light::-webkit-slider-thumb {
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+.hero-marquee-mask {
+  overflow: hidden;
+}
+
+.hero-marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 12px;
+  animation: marqueeScroll 24s linear infinite;
+}
+
+.hero-slide-card {
+  width: 240px;
+  height: 110px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hero-marquee-mask:hover .hero-marquee-track {
+  animation-play-state: paused;
+}
+
+.hero-bg-track {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  width: max-content;
+  height: 100%;
+  animation: marqueeScroll 40s linear infinite;
+}
+
+.hero-bg-panel {
+  width: 40vw;
+  min-width: 340px;
+  height: 100%;
+  flex: 0 0 auto;
+}
+
+.hero-bg-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.35;
+  filter: saturate(105%) contrast(90%);
 }
 
 /* Staggered children animation */
@@ -430,6 +484,16 @@ input[type="range"].slider-light::-webkit-slider-thumb {
 
   .card-apple {
     border-radius: 22px;
+  }
+
+  .hero-slide-card {
+    width: 180px;
+    height: 84px;
+  }
+
+  .hero-bg-panel {
+    width: 70vw;
+    min-width: 250px;
   }
 }
 

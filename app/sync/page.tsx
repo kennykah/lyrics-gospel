@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import LyricEditor from '@/components/LyricEditor';
 import type { SyncedLine } from '@/utils/lrcParser';
-import { createLrcFile, createSong, getCurrentUserId } from '@/lib/supabaseData';
+import { createLrcFile, createSong, fetchLrcBySongId, fetchSongById, fetchUserRole, getCurrentUserId, updateSongWithLrc } from '@/lib/supabaseData';
+import { isSupabaseAudioStorageEnabled, uploadSongAudioToStorage } from '@/lib/audioStorage';
+import type { Song } from '@/types';
 
 export default function SyncPage() {
   return (
-    <AuthGuard>
+    <AuthGuard requireAdmin>
       <SyncPageContent />
     </AuthGuard>
   );
@@ -18,6 +20,8 @@ export default function SyncPage() {
 
 function SyncPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editSongId = searchParams.get('songId');
   const [savedLrc, setSavedLrc] = useState<string | null>(null);
   const [savedLines, setSavedLines] = useState<SyncedLine[]>([]);
   const [title, setTitle] = useState('');
@@ -26,14 +30,63 @@ function SyncPageContent() {
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [initialLyrics, setInitialLyrics] = useState('');
+  const [initialSyncedLyrics, setInitialSyncedLyrics] = useState<SyncedLine[]>([]);
+  const [initialAudioUrl, setInitialAudioUrl] = useState<string | null>(null);
+  const [savedAudioFile, setSavedAudioFile] = useState<File | null>(null);
+  const [savedAudioUrl, setSavedAudioUrl] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     getCurrentUserId().then(setUserId);
   }, []);
 
-  const handleSave = (lrcContent: string, synced: SyncedLine[]) => {
+  useEffect(() => {
+    const loadEditSongContext = async () => {
+      const role = await fetchUserRole();
+      setIsAdmin(role === 'admin');
+
+      if (!editSongId) return;
+
+      setLoadingExisting(true);
+      if (role !== 'admin') {
+        setError('Seul un admin peut resynchroniser une chanson existante.');
+        setLoadingExisting(false);
+        return;
+      }
+
+      const [{ data, error: songError }, { data: lrcData, error: lrcError }] = await Promise.all([
+        fetchSongById(editSongId),
+        fetchLrcBySongId(editSongId),
+      ]);
+
+      if (songError || !data) {
+        setError(songError?.message || 'Chanson introuvable pour la resynchronisation.');
+        setLoadingExisting(false);
+        return;
+      }
+
+      const song = data as Song;
+      setTitle(song.title);
+      setArtist(song.artist_name);
+      setInitialLyrics(song.lyrics_text || '');
+      setInitialAudioUrl(song.audio_url || null);
+
+      if (!lrcError && lrcData?.synced_lyrics) {
+        setInitialSyncedLyrics((lrcData.synced_lyrics as SyncedLine[]) || []);
+      }
+      setLoadingExisting(false);
+    };
+
+    loadEditSongContext();
+  }, [editSongId]);
+
+  const handleSave = (lrcContent: string, synced: SyncedLine[], audioFile: File | null, audioUrl: string | null) => {
     setSavedLrc(lrcContent);
     setSavedLines(synced);
+    setSavedAudioFile(audioFile);
+    setSavedAudioUrl(audioUrl);
     setSuccess('');
     setError('');
   };
@@ -51,9 +104,58 @@ function SyncPageContent() {
     setError('');
     setSuccess('');
 
+    let finalAudioUrl = savedAudioUrl?.trim() || initialAudioUrl?.trim() || null;
+
+    if (isSupabaseAudioStorageEnabled() && savedAudioFile) {
+      const { data: uploadData, error: uploadError } = await uploadSongAudioToStorage({
+        file: savedAudioFile,
+        userId,
+        title: title.trim(),
+        artist: artist.trim(),
+        songId: editSongId,
+      });
+
+      if (uploadError || !uploadData?.publicUrl) {
+        setSaving(false);
+        setError(`Échec upload audio Supabase: ${uploadError?.message || 'bucket/policies à vérifier'}`);
+        return;
+      }
+
+      finalAudioUrl = uploadData.publicUrl;
+    }
+
+    if (editSongId) {
+      if (!isAdmin) {
+        setSaving(false);
+        setError('Seul un admin peut resynchroniser une chanson existante.');
+        return;
+      }
+
+      const { error: updateError } = await updateSongWithLrc({
+        songId: editSongId,
+        title: title.trim(),
+        artist_name: artist.trim(),
+        audio_url: finalAudioUrl,
+        lrcRaw: savedLrc,
+        syncedLyrics: savedLines,
+      });
+
+      if (updateError) {
+        setSaving(false);
+        setError(updateError.message || 'Erreur lors de la mise à jour de la synchronisation.');
+        return;
+      }
+
+      setSaving(false);
+      setSuccess('Resynchronisation enregistrée ! Redirection...');
+      setTimeout(() => router.push(`/songs/${editSongId}`), 1200);
+      return;
+    }
+
     const { data: song, error: songError } = await createSong({
       title: title.trim(),
       artist_name: artist.trim(),
+      audio_url: finalAudioUrl,
       lyrics_text: savedLines.map((l) => l.text).join('\n'),
       created_by: userId,
       submitted_by: userId,
@@ -106,6 +208,18 @@ function SyncPageContent() {
             Informations de la chanson
           </h2>
 
+          {editSongId && (
+            <div className="mb-4 px-4 py-3 rounded-[12px] bg-[--accent]/10 border border-[--accent]/20 text-[13px] text-[--accent]">
+              Mode édition de synchronisation (admin) : la chanson existante sera mise à jour.
+            </div>
+          )}
+
+          {loadingExisting && (
+            <div className="mb-4 px-4 py-3 rounded-[12px] bg-white/[0.04] border border-white/[0.08] text-[13px] text-white/60">
+              Chargement des informations de la chanson...
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 px-4 py-3 rounded-[12px] bg-red-500/10 border border-red-500/20 text-[13px] text-red-400">
               {error}
@@ -144,7 +258,19 @@ function SyncPageContent() {
         </div>
 
         {/* Editor */}
-        <LyricEditor onSave={handleSave} onCancel={() => setSavedLrc(null)} />
+        <LyricEditor
+          onSave={handleSave}
+          onCancel={() => {
+            setSavedLrc(null);
+            setSavedLines([]);
+            setSavedAudioFile(null);
+            setSavedAudioUrl(null);
+          }}
+          initialLyrics={initialLyrics}
+          initialSyncedLyrics={initialSyncedLyrics}
+          initialAudioUrl={initialAudioUrl}
+          isEditMode={Boolean(editSongId)}
+        />
 
         {/* Generated LRC output */}
         {savedLrc && (

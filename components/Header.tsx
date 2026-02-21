@@ -65,8 +65,8 @@ export default function Header() {
       <div className="max-w-[1200px] mx-auto px-6 h-[52px] flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6c5ce7] to-[#a78bfa] flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-            <span className="text-white text-xs font-bold tracking-tight">GL</span>
+          <div className="w-8 h-8 rounded-[10px] overflow-hidden bg-gradient-to-br from-[#6c5ce7] to-[#a78bfa] flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+            <img src="/branding/logo-mark.svg" alt="Gospel Lyrics" className="w-full h-full object-cover" />
           </div>
           <span className={`text-[15px] font-semibold tracking-[-0.02em] hidden sm:block transition-colors duration-300 ${
             isLight ? 'text-[--text-primary]' : 'text-white'
