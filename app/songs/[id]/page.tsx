@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { deleteSongById, fetchLrcBySongId, fetchSongById, fetchRelatedSongs, fetchUserRole, saveSongLrcCorrection } from '@/lib/supabaseData';
+import { deleteSongById, fetchLrcBySongId, fetchSongById, fetchRelatedSongs, fetchUserRole, saveSongLrcCorrection, updateSongMetadata } from '@/lib/supabaseData';
 import { isSupabaseAudioStorageEnabled, tryFindSongAudioUrlInStorage } from '@/lib/audioStorage';
 import type { Song, LrcFile } from '@/types';
 import AppleLyricPlayer from '@/components/AppleLyricPlayer';
@@ -35,6 +35,12 @@ export default function SongDetailPage() {
   const [lrcEditMessage, setLrcEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [deletingSong, setDeletingSong] = useState(false);
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  const [metadataTitle, setMetadataTitle] = useState('');
+  const [metadataArtist, setMetadataArtist] = useState('');
+  const [metadataCollaborations, setMetadataCollaborations] = useState('');
+  const [savingMetadata, setSavingMetadata] = useState(false);
+  const [metadataMessage, setMetadataMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -76,6 +82,12 @@ export default function SongDetailPage() {
   }, [songId]);
 
   const syncedLyrics = useMemo(() => lrc?.synced_lyrics || [], [lrc]);
+  const artistDisplay = useMemo(() => {
+    if (!song) return '';
+    const collabs = song.collaborations?.trim();
+    return collabs ? `${song.artist_name} feat. ${collabs}` : song.artist_name;
+  }, [song]);
+
   const plainLyrics = useMemo(() => {
     if (syncedLyrics.length > 0) {
       return syncedLyrics
@@ -86,7 +98,7 @@ export default function SongDetailPage() {
     if (song?.lyrics_text?.trim()) return song.lyrics_text.trim();
     if (lrc?.lrc_raw?.trim()) return extractPlainLyrics(lrc.lrc_raw);
     return '';
-  }, [syncedLyrics, song?.lyrics_text, lrc?.lrc_raw]);
+  }, [syncedLyrics, song, lrc]);
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -228,6 +240,56 @@ export default function SongDetailPage() {
     router.push('/songs');
   };
 
+  const handleStartMetadataEdit = () => {
+    if (!song || userRole !== 'admin') return;
+    setMetadataTitle(song.title || '');
+    setMetadataArtist(song.artist_name || '');
+    setMetadataCollaborations(song.collaborations || '');
+    setMetadataMessage(null);
+    setIsEditingMetadata(true);
+  };
+
+  const handleCancelMetadataEdit = () => {
+    setIsEditingMetadata(false);
+    setMetadataMessage(null);
+  };
+
+  const handleSaveMetadata = async () => {
+    if (!song || userRole !== 'admin') return;
+
+    if (!metadataTitle.trim() || !metadataArtist.trim()) {
+      setMetadataMessage({
+        type: 'error',
+        text: 'Le titre et l’artiste principal sont obligatoires.',
+      });
+      return;
+    }
+
+    setSavingMetadata(true);
+    setMetadataMessage(null);
+
+    const { data, error } = await updateSongMetadata({
+      songId: song.id,
+      title: metadataTitle,
+      artist_name: metadataArtist,
+      collaborations: metadataCollaborations,
+    });
+
+    if (error || !data) {
+      setMetadataMessage({
+        type: 'error',
+        text: error?.message || 'Impossible de mettre à jour les informations du son.',
+      });
+      setSavingMetadata(false);
+      return;
+    }
+
+    setSong((prev) => (prev ? { ...prev, ...(data as Song) } : prev));
+    setMetadataMessage({ type: 'success', text: 'Informations du son mises à jour.' });
+    setSavingMetadata(false);
+    setIsEditingMetadata(false);
+  };
+
   const statusLabel: Record<string, string> = {
     published: 'Publié',
     draft: 'Brouillon',
@@ -323,7 +385,7 @@ export default function SongDetailPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold tracking-[-0.02em]">{song.title}</h1>
-                  <p className="text-white/50 text-[15px]">{song.artist_name}</p>
+                  <p className="text-white/50 text-[15px]">{artistDisplay}</p>
                   {song.album && (
                     <p className="text-white/30 text-[13px] mt-0.5">{song.album}{song.release_year ? ` \u00B7 ${song.release_year}` : ''}</p>
                   )}
@@ -398,6 +460,12 @@ export default function SongDetailPage() {
                           {song.artist_name}
                         </Link>
                       </div>
+                      {song.collaborations?.trim() && (
+                        <div className="flex justify-between text-[14px] gap-6">
+                          <span className="text-white/40">Collaborations</span>
+                          <span className="text-white/80 font-medium text-right">{song.collaborations}</span>
+                        </div>
+                      )}
                       {song.album && (
                         <div className="flex justify-between text-[14px]">
                           <span className="text-white/40">Album</span>
@@ -548,6 +616,12 @@ export default function SongDetailPage() {
                         Modifier la synchronisation
                       </Link>
                       <button
+                        onClick={handleStartMetadataEdit}
+                        className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-white/70 transition-colors sm:col-span-2"
+                      >
+                        Modifier titre / artiste
+                      </button>
+                      <button
                         onClick={handleDeleteSong}
                         disabled={deletingSong}
                         className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-semibold text-white/70 transition-colors sm:col-span-2"
@@ -562,7 +636,70 @@ export default function SongDetailPage() {
                     {lrcEditMessage.text}
                   </p>
                 )}
+                {metadataMessage && (
+                  <p className={`mt-3 text-[12px] ${metadataMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {metadataMessage.text}
+                  </p>
+                )}
               </div>
+
+              {isEditingMetadata && (
+                <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-5 space-y-3">
+                  <h3 className="text-[12px] font-semibold text-white/80">Modification des informations du son</h3>
+                  <p className="text-[12px] text-white/45 leading-relaxed">
+                    Mettez à jour uniquement le titre, l’artiste principal et les collaborations, sans changer les paroles ni la synchronisation.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Titre *</label>
+                      <input
+                        value={metadataTitle}
+                        onChange={(e) => setMetadataTitle(e.target.value)}
+                        className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
+                        placeholder="Nom du son"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Artiste principal *</label>
+                      <input
+                        value={metadataArtist}
+                        onChange={(e) => setMetadataArtist(e.target.value)}
+                        className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
+                        placeholder="Artiste principal"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Collaborations (optionnel)</label>
+                    <input
+                      value={metadataCollaborations}
+                      onChange={(e) => setMetadataCollaborations(e.target.value)}
+                      className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
+                      placeholder="Ex: Morijah, Dena Mwana"
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={handleSaveMetadata}
+                      disabled={savingMetadata}
+                      className="h-10 px-4 rounded-[10px] bg-[--accent] hover:bg-[--accent-hover] disabled:opacity-40 text-[12px] font-semibold text-white transition-colors"
+                    >
+                      {savingMetadata ? 'Enregistrement...' : 'Enregistrer les informations'}
+                    </button>
+                    <button
+                      onClick={handleCancelMetadataEdit}
+                      disabled={savingMetadata}
+                      className="h-10 px-4 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-40 text-[12px] font-medium text-white/70 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {isEditingLrc && (
                 <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-5 space-y-3">

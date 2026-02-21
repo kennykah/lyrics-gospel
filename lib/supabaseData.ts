@@ -144,6 +144,27 @@ export async function updateSongWithLrc(params: {
   return { data: songResult.data, error: null };
 }
 
+export async function updateSongMetadata(params: {
+  songId: string;
+  title: string;
+  artist_name: string;
+  collaborations?: string | null;
+}) {
+  const collaborations = params.collaborations?.trim() || null;
+
+  return supabase
+    .from('songs')
+    .update({
+      title: params.title.trim(),
+      artist_name: params.artist_name.trim(),
+      collaborations,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.songId)
+    .select()
+    .single();
+}
+
 export async function deleteSongById(songId: string) {
   return supabase
     .from('songs')

@@ -3,6 +3,7 @@ export interface Song {
   title: string;
   slug?: string;
   artist_name: string;
+  collaborations?: string | null;
   album?: string;
   release_year?: number;
   audio_url?: string;
