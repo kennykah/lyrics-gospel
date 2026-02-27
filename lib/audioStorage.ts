@@ -72,6 +72,10 @@ function getFileStem(name: string) {
   return name.replace(/\.[^.]+$/g, '');
 }
 
+function stripLeadingUploadPrefix(value: string) {
+  return value.replace(/^\d{10,}-/g, '');
+}
+
 function buildExactNameCandidates(params: {
   title?: string | null;
   artist?: string | null;
@@ -169,7 +173,8 @@ export async function tryFindSongAudioUrlInStorage(params: {
 
     const exactHit = audioFiles.find((file: { name: string }) => {
       const stem = normalizeForCompare(getFileStem(file.name));
-      return exactCandidates.includes(stem);
+      const normalizedWithoutPrefix = normalizeForCompare(stripLeadingUploadPrefix(getFileStem(file.name)));
+      return exactCandidates.includes(stem) || exactCandidates.includes(normalizedWithoutPrefix);
     });
 
     if (exactHit?.name) {

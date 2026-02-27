@@ -274,7 +274,7 @@ export default function AppleLyricPlayer({
 
           <div className="mb-4 h-5 text-center px-3">
             <p className="text-[13px] text-white/70 truncate">
-              {activeLineText || 'Lecture en cours...'}
+              {activeLineText || '♪ Instrumental'}
             </p>
           </div>
 
@@ -284,7 +284,9 @@ export default function AppleLyricPlayer({
             </button>
 
             <button onClick={togglePlay} disabled={!audioReady} className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-black disabled:opacity-30 hover:scale-105 active:scale-95 transition-transform shadow-lg" aria-label={isPlaying ? 'Pause' : 'Lecture'}>
-              {isPlaying ? (
+              {!audioReady ? (
+                <div className="w-5 h-5 border-2 border-black/20 border-t-black/70 rounded-full animate-spin" />
+              ) : isPlaying ? (
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" /></svg>
               ) : (
                 <svg className="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
