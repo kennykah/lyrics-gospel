@@ -90,6 +90,7 @@ export default function ArtistDetailPage() {
   const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
   const [savingArtistMedia, setSavingArtistMedia] = useState(false);
   const [creatingArtistProfile, setCreatingArtistProfile] = useState(false);
+  const [isEditingArtist, setIsEditingArtist] = useState(false);
   const [artistMediaMessage, setArtistMediaMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [artistNameInput, setArtistNameInput] = useState('');
   const [artistBioInput, setArtistBioInput] = useState('');
@@ -179,6 +180,11 @@ export default function ArtistDetailPage() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [artist, isVirtualArtist]);
+
+  useEffect(() => {
+    setIsEditingArtist(false);
+    setArtistMediaMessage(null);
+  }, [slug]);
 
   const handleToggleFeatured = async () => {
     if (!artist || isVirtualArtist) return;
@@ -408,6 +414,15 @@ export default function ArtistDetailPage() {
               {/* Admin controls */}
               {userRole === 'admin' && (
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      if (isEditingArtist) setArtistMediaMessage(null);
+                      setIsEditingArtist((prev) => !prev);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-white/60 text-[12px] font-medium transition-colors"
+                  >
+                    {isEditingArtist ? 'Fermer édition' : 'Éditer artiste'}
+                  </button>
                   {!isVirtualArtist && (
                     <button
                       onClick={handleToggleFeatured}
@@ -427,7 +442,7 @@ export default function ArtistDetailPage() {
                 </div>
               )}
 
-              {userRole === 'admin' && (
+              {userRole === 'admin' && isEditingArtist && (
                 <div className="mt-5 rounded-[14px] bg-white/[0.05] border border-white/[0.08] p-3.5 space-y-3">
                   <p className="text-[11px] uppercase tracking-wider text-white/35">Éditer artiste (admin)</p>
 
