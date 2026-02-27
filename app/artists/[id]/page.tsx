@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists, updateArtistMediaById } from '@/lib/supabaseData';
+import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists, updateArtistProfileById } from '@/lib/supabaseData';
 import type { Artist, Song } from '@/types';
 import { slugifyArtistName } from '@/utils/artistSlug';
 import { resolveImageInput } from '@/utils/imageInput';
@@ -90,6 +90,12 @@ export default function ArtistDetailPage() {
   const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
   const [savingArtistMedia, setSavingArtistMedia] = useState(false);
   const [artistMediaMessage, setArtistMediaMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [artistNameInput, setArtistNameInput] = useState('');
+  const [artistBioInput, setArtistBioInput] = useState('');
+  const [artistQuoteInput, setArtistQuoteInput] = useState('');
+  const [artistMinistryInput, setArtistMinistryInput] = useState('');
+  const [artistCountryInput, setArtistCountryInput] = useState('');
+  const [artistWebsiteInput, setArtistWebsiteInput] = useState('');
 
   async function loadArtist() {
     setLoading(true);
@@ -159,6 +165,12 @@ export default function ArtistDetailPage() {
   useEffect(() => {
     if (!artist || isVirtualArtist) return;
     const frame = window.requestAnimationFrame(() => {
+      setArtistNameInput(artist.name || '');
+      setArtistBioInput(artist.bio || '');
+      setArtistQuoteInput(artist.quote || '');
+      setArtistMinistryInput(artist.ministry || '');
+      setArtistCountryInput(artist.country || '');
+      setArtistWebsiteInput(artist.website_url || '');
       setArtistImageUrlInput(artist.image_url || '');
       setArtistBannerUrlInput(artist.banner_url || '');
       setArtistImageFile(null);
@@ -225,8 +237,15 @@ export default function ArtistDetailPage() {
       return;
     }
 
-    const { data, error } = await updateArtistMediaById({
+    const { data, error } = await updateArtistProfileById({
       artistId: artist.id,
+      currentName: artist.name,
+      name: artistNameInput,
+      bio: artistBioInput,
+      quote: artistQuoteInput,
+      ministry: artistMinistryInput,
+      country: artistCountryInput,
+      website_url: artistWebsiteInput,
       image_url: imageUrl,
       banner_url: bannerUrl,
     });
@@ -234,16 +253,20 @@ export default function ArtistDetailPage() {
     if (error || !data) {
       setArtistMediaMessage({
         type: 'error',
-        text: error?.message || 'Mise à jour des images impossible.',
+        text: error?.message || 'Mise à jour des informations artiste impossible.',
       });
       setSavingArtistMedia(false);
       return;
     }
 
-    setArtist(data as Artist);
+    const updated = data as Artist;
+    setArtist(updated);
+    if (updated.slug && updated.slug !== slug) {
+      router.replace(`/artists/${updated.slug}`);
+    }
     setArtistImageFile(null);
     setArtistBannerFile(null);
-    setArtistMediaMessage({ type: 'success', text: 'Images artiste mises à jour.' });
+    setArtistMediaMessage({ type: 'success', text: 'Informations artiste mises à jour.' });
     setSavingArtistMedia(false);
   };
 
@@ -379,7 +402,69 @@ export default function ArtistDetailPage() {
 
               {userRole === 'admin' && !isVirtualArtist && (
                 <div className="mt-5 rounded-[14px] bg-white/[0.05] border border-white/[0.08] p-3.5 space-y-3">
-                  <p className="text-[11px] uppercase tracking-wider text-white/35">Images artiste (admin)</p>
+                  <p className="text-[11px] uppercase tracking-wider text-white/35">Éditer artiste (admin)</p>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Nom artiste</label>
+                    <input
+                      value={artistNameInput}
+                      onChange={(e) => setArtistNameInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="Nom"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Ministère</label>
+                    <input
+                      value={artistMinistryInput}
+                      onChange={(e) => setArtistMinistryInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="Ministère"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Pays</label>
+                    <input
+                      value={artistCountryInput}
+                      onChange={(e) => setArtistCountryInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="Pays"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Site web</label>
+                    <input
+                      value={artistWebsiteInput}
+                      onChange={(e) => setArtistWebsiteInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Biographie</label>
+                    <textarea
+                      value={artistBioInput}
+                      onChange={(e) => setArtistBioInput(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="Biographie"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Citation</label>
+                    <textarea
+                      value={artistQuoteInput}
+                      onChange={(e) => setArtistQuoteInput(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="Citation"
+                    />
+                  </div>
 
                   <div>
                     <label className="block text-[11px] text-white/40 mb-1">Photo profil URL / Google Drive</label>
@@ -426,7 +511,7 @@ export default function ArtistDetailPage() {
                     disabled={savingArtistMedia}
                     className="px-3.5 py-2 rounded-lg bg-white/[0.12] hover:bg-white/[0.18] text-white/75 text-[12px] font-medium transition-colors disabled:opacity-30"
                   >
-                    {savingArtistMedia ? 'Enregistrement...' : 'Enregistrer les images'}
+                    {savingArtistMedia ? 'Enregistrement...' : 'Enregistrer les informations'}
                   </button>
 
                   {artistMediaMessage && (
@@ -491,11 +576,19 @@ export default function ArtistDetailPage() {
                   href={`/songs/${latestSong.id}`}
                   className="card-apple p-5 sm:p-6 group flex items-center gap-5"
                 >
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[16px] bg-gradient-to-br from-[#a78bfa] to-[#6c5ce7] flex items-center justify-center flex-shrink-0 shadow-md group-hover:shadow-lg transition-shadow">
-                    <svg className="w-7 h-7 text-white/70 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                    </svg>
-                  </div>
+                  {latestSong.cover_image_url ? (
+                    <img
+                      src={latestSong.cover_image_url}
+                      alt={latestSong.title}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-[16px] object-cover flex-shrink-0 shadow-md group-hover:shadow-lg transition-shadow"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[16px] bg-gradient-to-br from-[#a78bfa] to-[#6c5ce7] flex items-center justify-center flex-shrink-0 shadow-md group-hover:shadow-lg transition-shadow">
+                      <svg className="w-7 h-7 text-white/70 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                      </svg>
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <h3 className="text-[16px] font-semibold text-[--text-primary] group-hover:text-[--accent] transition-colors truncate">
                       {latestSong.title}
@@ -534,11 +627,15 @@ export default function ArtistDetailPage() {
                       <span className="text-[13px] text-[--text-tertiary] w-6 text-right tabular-nums font-mono">
                         {i + 1}
                       </span>
-                      <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-[#a78bfa]/20 to-[#6c5ce7]/20 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-[--accent]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303" />
-                        </svg>
-                      </div>
+                      {song.cover_image_url ? (
+                        <img src={song.cover_image_url} alt={song.title} className="w-10 h-10 rounded-[10px] object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-[#a78bfa]/20 to-[#6c5ce7]/20 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-[--accent]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303" />
+                          </svg>
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <h3 className="text-[14px] font-medium text-[--text-primary] group-hover:text-[--accent] transition-colors truncate">
                           {song.title}

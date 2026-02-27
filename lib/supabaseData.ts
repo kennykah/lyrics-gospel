@@ -346,6 +346,53 @@ export async function updateArtistMediaById(params: {
     .single();
 }
 
+export async function updateArtistProfileById(params: {
+  artistId: string;
+  currentName: string;
+  name: string;
+  bio?: string | null;
+  quote?: string | null;
+  ministry?: string | null;
+  country?: string | null;
+  website_url?: string | null;
+  image_url?: string | null;
+  banner_url?: string | null;
+}) {
+  const normalizedName = params.name.trim();
+  const nextSlug = slugifyArtistName(normalizedName);
+
+  const updateRes = await supabase
+    .from('artists')
+    .update({
+      name: normalizedName,
+      slug: nextSlug,
+      bio: params.bio?.trim() || null,
+      quote: params.quote?.trim() || null,
+      ministry: params.ministry?.trim() || null,
+      country: params.country?.trim() || null,
+      website_url: params.website_url?.trim() || null,
+      image_url: params.image_url?.trim() || null,
+      banner_url: params.banner_url?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.artistId)
+    .select()
+    .single();
+
+  if (updateRes.error || !updateRes.data) {
+    return { data: null, error: updateRes.error };
+  }
+
+  if (params.currentName.trim().toLowerCase() !== normalizedName.toLowerCase()) {
+    await supabase
+      .from('songs')
+      .update({ artist_name: normalizedName, updated_at: new Date().toISOString() })
+      .ilike('artist_name', params.currentName.trim());
+  }
+
+  return updateRes;
+}
+
 export async function fetchSongsByArtistName(artistName: string, limit = 20) {
   return supabase
     .from('songs')

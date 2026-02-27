@@ -100,7 +100,10 @@ export default function FloatingMiniPlayer() {
       </div>
 
       <div className="mt-2 flex justify-end">
-        <Link href={`/songs/${track?.songId}`} className="text-[11px] text-[--accent] hover:underline">
+        <Link
+          href={`/songs/${track?.songId}`}
+          className="inline-flex items-center h-7 px-2.5 rounded-[8px] bg-white/[0.14] hover:bg-white/[0.22] text-[11px] text-white font-medium transition-colors"
+        >
           Revenir à la chanson
         </Link>
       </div>
