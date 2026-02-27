@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists, updateArtistProfileById } from '@/lib/supabaseData';
+import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists, updateArtistProfileById, upsertArtistByName } from '@/lib/supabaseData';
 import type { Artist, Song } from '@/types';
 import { slugifyArtistName } from '@/utils/artistSlug';
 import { resolveImageInput } from '@/utils/imageInput';
@@ -89,6 +89,7 @@ export default function ArtistDetailPage() {
   const [artistImageFile, setArtistImageFile] = useState<File | null>(null);
   const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
   const [savingArtistMedia, setSavingArtistMedia] = useState(false);
+  const [creatingArtistProfile, setCreatingArtistProfile] = useState(false);
   const [artistMediaMessage, setArtistMediaMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [artistNameInput, setArtistNameInput] = useState('');
   const [artistBioInput, setArtistBioInput] = useState('');
@@ -270,6 +271,32 @@ export default function ArtistDetailPage() {
     setSavingArtistMedia(false);
   };
 
+  const handleCreateArtistProfile = async () => {
+    if (!artist || !isVirtualArtist || userRole !== 'admin') return;
+
+    setCreatingArtistProfile(true);
+    setArtistMediaMessage(null);
+
+    const { data, error } = await upsertArtistByName({
+      name: artist.name,
+    });
+
+    if (error || !data) {
+      setArtistMediaMessage({
+        type: 'error',
+        text: error?.message || 'Impossible de créer la fiche artiste.',
+      });
+      setCreatingArtistProfile(false);
+      return;
+    }
+
+    const created = data as Artist;
+    setArtist(created);
+    setIsVirtualArtist(false);
+    setArtistMediaMessage({ type: 'success', text: 'Fiche artiste créée. Vous pouvez maintenant éditer ses informations.' });
+    setCreatingArtistProfile(false);
+  };
+
   const latestSong = songs[0];
   const otherSongs = songs.slice(1);
 
@@ -400,9 +427,25 @@ export default function ArtistDetailPage() {
                 </div>
               )}
 
-              {userRole === 'admin' && !isVirtualArtist && (
+              {userRole === 'admin' && (
                 <div className="mt-5 rounded-[14px] bg-white/[0.05] border border-white/[0.08] p-3.5 space-y-3">
                   <p className="text-[11px] uppercase tracking-wider text-white/35">Éditer artiste (admin)</p>
+
+                  {isVirtualArtist ? (
+                    <div className="space-y-3">
+                      <p className="text-[12px] text-white/55 leading-relaxed">
+                        Cet artiste vient uniquement des chansons et n’a pas encore de fiche dédiée.
+                      </p>
+                      <button
+                        onClick={handleCreateArtistProfile}
+                        disabled={creatingArtistProfile}
+                        className="px-3.5 py-2 rounded-lg bg-white/[0.12] hover:bg-white/[0.18] text-white/80 text-[12px] font-medium transition-colors disabled:opacity-30"
+                      >
+                        {creatingArtistProfile ? 'Création...' : 'Créer la fiche artiste'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
 
                   <div>
                     <label className="block text-[11px] text-white/40 mb-1">Nom artiste</label>
@@ -513,6 +556,8 @@ export default function ArtistDetailPage() {
                   >
                     {savingArtistMedia ? 'Enregistrement...' : 'Enregistrer les informations'}
                   </button>
+                    </>
+                  )}
 
                   {artistMediaMessage && (
                     <p className={`text-[12px] ${artistMediaMessage.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
