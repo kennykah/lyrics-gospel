@@ -3,15 +3,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SyncedLine } from '@/utils/lrcParser';
 import { getPersistentAudioElement } from '@/lib/persistentAudio';
+import { setPlayerTrack } from '@/lib/playerSession';
 
 interface AppleLyricPlayerProps {
   syncedLyrics: SyncedLine[];
   lrcRaw?: string;
   audioUrl?: string | null;
   onFirstPlay?: () => void;
+  songId?: string;
+  songTitle?: string;
+  songArtistName?: string;
+  songCoverImageUrl?: string | null;
 }
 
-export default function AppleLyricPlayer({ syncedLyrics, audioUrl, onFirstPlay }: AppleLyricPlayerProps) {
+export default function AppleLyricPlayer({
+  syncedLyrics,
+  audioUrl,
+  onFirstPlay,
+  songId,
+  songTitle,
+  songArtistName,
+  songCoverImageUrl,
+}: AppleLyricPlayerProps) {
   const [audioError, setAudioError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -43,6 +56,16 @@ export default function AppleLyricPlayer({ syncedLyrics, audioUrl, onFirstPlay }
 
   const remoteAudioUrl = audioUrl?.startsWith('http') ? audioUrl : null;
   const effectiveAudioSrc = localObjectUrl || remoteAudioUrl || '';
+
+  useEffect(() => {
+    if (!songId || !songTitle || !songArtistName || !effectiveAudioSrc) return;
+    setPlayerTrack({
+      songId,
+      title: songTitle,
+      artistName: songArtistName,
+      coverImageUrl: songCoverImageUrl || null,
+    });
+  }, [songId, songTitle, songArtistName, songCoverImageUrl, effectiveAudioSrc]);
 
   useEffect(() => {
     const audio = audioRef.current;

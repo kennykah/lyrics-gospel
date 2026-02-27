@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import LyricEditor from '@/components/LyricEditor';
 import type { SyncedLine } from '@/utils/lrcParser';
-import { createLrcFile, createSong, fetchLrcBySongId, fetchSongById, fetchUserRole, getCurrentUserId, updateSongWithLrc } from '@/lib/supabaseData';
+import { createLrcFile, createSong, fetchLrcBySongId, fetchSongById, fetchUserRole, getCurrentUserId, updateSongWithLrc, upsertArtistByName } from '@/lib/supabaseData';
 import { isSupabaseAudioStorageEnabled, uploadSongAudioToStorage } from '@/lib/audioStorage';
 import type { Song } from '@/types';
+import { resolveImageInput } from '@/utils/imageInput';
 
 export default function SyncPage() {
   return (
@@ -37,6 +38,12 @@ function SyncPageContent() {
   const [savedAudioUrl, setSavedAudioUrl] = useState<string | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [songCoverUrlInput, setSongCoverUrlInput] = useState('');
+  const [songCoverFile, setSongCoverFile] = useState<File | null>(null);
+  const [artistImageUrlInput, setArtistImageUrlInput] = useState('');
+  const [artistImageFile, setArtistImageFile] = useState<File | null>(null);
+  const [artistBannerUrlInput, setArtistBannerUrlInput] = useState('');
+  const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
 
   useEffect(() => {
     getCurrentUserId().then(setUserId);
@@ -152,9 +159,24 @@ function SyncPageContent() {
       return;
     }
 
+    let resolvedCoverImage: string | null = null;
+    let resolvedArtistImage: string | null = null;
+    let resolvedArtistBanner: string | null = null;
+
+    try {
+      resolvedCoverImage = await resolveImageInput({ urlInput: songCoverUrlInput, file: songCoverFile, maxMb: 3 });
+      resolvedArtistImage = await resolveImageInput({ urlInput: artistImageUrlInput, file: artistImageFile, maxMb: 3 });
+      resolvedArtistBanner = await resolveImageInput({ urlInput: artistBannerUrlInput, file: artistBannerFile, maxMb: 4 });
+    } catch (imageError) {
+      setSaving(false);
+      setError(imageError instanceof Error ? imageError.message : 'Impossible de traiter les images.');
+      return;
+    }
+
     const { data: song, error: songError } = await createSong({
       title: title.trim(),
       artist_name: artist.trim(),
+      cover_image_url: resolvedCoverImage,
       audio_url: finalAudioUrl,
       lyrics_text: savedLines.map((l) => l.text).join('\n'),
       created_by: userId,
@@ -179,6 +201,20 @@ function SyncPageContent() {
       setSaving(false);
       setError(lrcError.message);
       return;
+    }
+
+    if (resolvedArtistImage || resolvedArtistBanner) {
+      const { error: artistError } = await upsertArtistByName({
+        name: artist.trim(),
+        image_url: resolvedArtistImage,
+        banner_url: resolvedArtistBanner,
+      });
+
+      if (artistError) {
+        setSaving(false);
+        setError(artistError.message || 'Chanson créée, mais impossible de mettre à jour l\'image artiste.');
+        return;
+      }
     }
 
     setSaving(false);
@@ -255,6 +291,80 @@ function SyncPageContent() {
               />
             </div>
           </div>
+
+          {!editSongId && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Cover son URL / Google Drive (optionnel)
+                </label>
+                <input
+                  value={songCoverUrlInput}
+                  onChange={(e) => setSongCoverUrlInput(e.target.value)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2.5 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-[--accent]/40 transition-colors"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Uploader cover son (optionnel)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setSongCoverFile(e.target.files?.[0] || null)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2 text-[13px] text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Image artiste URL / Google Drive (optionnel)
+                </label>
+                <input
+                  value={artistImageUrlInput}
+                  onChange={(e) => setArtistImageUrlInput(e.target.value)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2.5 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-[--accent]/40 transition-colors"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Uploader image artiste (optionnel)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setArtistImageFile(e.target.files?.[0] || null)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2 text-[13px] text-white"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Bannière artiste URL / Google Drive (optionnel)
+                </label>
+                <input
+                  value={artistBannerUrlInput}
+                  onChange={(e) => setArtistBannerUrlInput(e.target.value)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2.5 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-[--accent]/40 transition-colors"
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[12px] font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+                  Uploader bannière artiste (optionnel)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setArtistBannerFile(e.target.files?.[0] || null)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-[10px] px-4 py-2 text-[13px] text-white"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Editor */}

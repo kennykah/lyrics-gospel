@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { extractPlainLyrics, parseLrc, type SyncedLine } from '@/utils/lrcParser';
 import LyricPlayer from '@/components/LyricPlayer';
-import { createLrcFile, createSong, getCurrentUserId } from '@/lib/supabaseData';
+import { createLrcFile, createSong, getCurrentUserId, upsertArtistByName } from '@/lib/supabaseData';
+import { resolveImageInput } from '@/utils/imageInput';
 
 export default function LrcUploadForm() {
   const [lrcText, setLrcText] = useState('');
@@ -15,6 +16,12 @@ export default function LrcUploadForm() {
   const [success, setSuccess] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [songCoverUrlInput, setSongCoverUrlInput] = useState('');
+  const [songCoverFile, setSongCoverFile] = useState<File | null>(null);
+  const [artistImageUrlInput, setArtistImageUrlInput] = useState('');
+  const [artistImageFile, setArtistImageFile] = useState<File | null>(null);
+  const [artistBannerUrlInput, setArtistBannerUrlInput] = useState('');
+  const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
 
   useEffect(() => {
     getCurrentUserId().then(setUserId);
@@ -74,10 +81,25 @@ export default function LrcUploadForm() {
     setError('');
     setSuccess('');
 
+    let resolvedCoverImage: string | null = null;
+    let resolvedArtistImage: string | null = null;
+    let resolvedArtistBanner: string | null = null;
+
+    try {
+      resolvedCoverImage = await resolveImageInput({ urlInput: songCoverUrlInput, file: songCoverFile, maxMb: 3 });
+      resolvedArtistImage = await resolveImageInput({ urlInput: artistImageUrlInput, file: artistImageFile, maxMb: 3 });
+      resolvedArtistBanner = await resolveImageInput({ urlInput: artistBannerUrlInput, file: artistBannerFile, maxMb: 4 });
+    } catch (imageError) {
+      setSaving(false);
+      setError(imageError instanceof Error ? imageError.message : 'Impossible de traiter les images.');
+      return;
+    }
+
     const lyricsPlain = extractPlainLyrics(lrcText);
     const { data: song, error: songError } = await createSong({
       title: title.trim(),
       artist_name: artist.trim(),
+      cover_image_url: resolvedCoverImage,
       lyrics_text: lyricsPlain,
       created_by: userId,
       submitted_by: userId,
@@ -101,6 +123,20 @@ export default function LrcUploadForm() {
       setSaving(false);
       setError(lrcError.message);
       return;
+    }
+
+    if (resolvedArtistImage || resolvedArtistBanner) {
+      const { error: artistError } = await upsertArtistByName({
+        name: artist.trim(),
+        image_url: resolvedArtistImage,
+        banner_url: resolvedArtistBanner,
+      });
+
+      if (artistError) {
+        setSaving(false);
+        setError(artistError.message || 'Chanson créée, mais impossible de mettre à jour l\'image artiste.');
+        return;
+      }
     }
 
     setSaving(false);
@@ -166,6 +202,78 @@ export default function LrcUploadForm() {
               onChange={(e) => setArtist(e.target.value)}
               className="input-apple w-full"
               placeholder="Ex: Traditional"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Cover son URL / Google Drive (optionnel)
+            </label>
+            <input
+              value={songCoverUrlInput}
+              onChange={(e) => setSongCoverUrlInput(e.target.value)}
+              className="input-apple w-full"
+              placeholder="https://..."
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Uploader cover son (optionnel)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setSongCoverFile(e.target.files?.[0] || null)}
+              className="input-apple w-full text-[12px]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Image artiste URL / Google Drive (optionnel)
+            </label>
+            <input
+              value={artistImageUrlInput}
+              onChange={(e) => setArtistImageUrlInput(e.target.value)}
+              className="input-apple w-full"
+              placeholder="https://..."
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Uploader image artiste (optionnel)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setArtistImageFile(e.target.files?.[0] || null)}
+              className="input-apple w-full text-[12px]"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Bannière artiste URL / Google Drive (optionnel)
+            </label>
+            <input
+              value={artistBannerUrlInput}
+              onChange={(e) => setArtistBannerUrlInput(e.target.value)}
+              className="input-apple w-full"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[12px] font-medium text-[--text-tertiary] mb-1.5 uppercase tracking-wider">
+              Uploader bannière artiste (optionnel)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setArtistBannerFile(e.target.files?.[0] || null)}
+              className="input-apple w-full text-[12px]"
             />
           </div>
         </div>

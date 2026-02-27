@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists } from '@/lib/supabaseData';
+import { deleteArtistWithSongs, fetchArtistBySlug, fetchSongsByArtistName, fetchArtistSongCount, toggleFeaturedArtist, fetchUserRole, fetchAllArtists, fetchDistinctArtists, updateArtistMediaById } from '@/lib/supabaseData';
 import type { Artist, Song } from '@/types';
 import { slugifyArtistName } from '@/utils/artistSlug';
+import { resolveImageInput } from '@/utils/imageInput';
 
 function getInitials(name: string) {
   return name
@@ -83,11 +84,12 @@ export default function ArtistDetailPage() {
   const [featureToggling, setFeatureToggling] = useState(false);
   const [isVirtualArtist, setIsVirtualArtist] = useState(false);
   const [deletingArtist, setDeletingArtist] = useState(false);
-
-  useEffect(() => {
-    if (!slug) return;
-    loadArtist();
-  }, [slug]);
+  const [artistImageUrlInput, setArtistImageUrlInput] = useState('');
+  const [artistBannerUrlInput, setArtistBannerUrlInput] = useState('');
+  const [artistImageFile, setArtistImageFile] = useState<File | null>(null);
+  const [artistBannerFile, setArtistBannerFile] = useState<File | null>(null);
+  const [savingArtistMedia, setSavingArtistMedia] = useState(false);
+  const [artistMediaMessage, setArtistMediaMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   async function loadArtist() {
     setLoading(true);
@@ -146,6 +148,25 @@ export default function ArtistDetailPage() {
     setLoading(false);
   }
 
+  useEffect(() => {
+    if (!slug) return;
+    const frame = window.requestAnimationFrame(() => {
+      void loadArtist();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!artist || isVirtualArtist) return;
+    const frame = window.requestAnimationFrame(() => {
+      setArtistImageUrlInput(artist.image_url || '');
+      setArtistBannerUrlInput(artist.banner_url || '');
+      setArtistImageFile(null);
+      setArtistBannerFile(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [artist, isVirtualArtist]);
+
   const handleToggleFeatured = async () => {
     if (!artist || isVirtualArtist) return;
     setFeatureToggling(true);
@@ -173,6 +194,57 @@ export default function ArtistDetailPage() {
     }
 
     router.push('/artists');
+  };
+
+  const handleSaveArtistMedia = async () => {
+    if (!artist || isVirtualArtist || userRole !== 'admin') return;
+
+    setSavingArtistMedia(true);
+    setArtistMediaMessage(null);
+
+    let imageUrl: string | null = null;
+    let bannerUrl: string | null = null;
+
+    try {
+      imageUrl = await resolveImageInput({
+        urlInput: artistImageUrlInput,
+        file: artistImageFile,
+        maxMb: 3,
+      });
+      bannerUrl = await resolveImageInput({
+        urlInput: artistBannerUrlInput,
+        file: artistBannerFile,
+        maxMb: 4,
+      });
+    } catch (mediaError) {
+      setArtistMediaMessage({
+        type: 'error',
+        text: mediaError instanceof Error ? mediaError.message : 'Impossible de traiter les images.',
+      });
+      setSavingArtistMedia(false);
+      return;
+    }
+
+    const { data, error } = await updateArtistMediaById({
+      artistId: artist.id,
+      image_url: imageUrl,
+      banner_url: bannerUrl,
+    });
+
+    if (error || !data) {
+      setArtistMediaMessage({
+        type: 'error',
+        text: error?.message || 'Mise à jour des images impossible.',
+      });
+      setSavingArtistMedia(false);
+      return;
+    }
+
+    setArtist(data as Artist);
+    setArtistImageFile(null);
+    setArtistBannerFile(null);
+    setArtistMediaMessage({ type: 'success', text: 'Images artiste mises à jour.' });
+    setSavingArtistMedia(false);
   };
 
   const latestSong = songs[0];
@@ -214,7 +286,17 @@ export default function ArtistDetailPage() {
 
       {/* ══ Hero banner ══ */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1a0533] via-[#0d0d12] to-[#0a1628]" />
+        {artist.banner_url ? (
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${artist.banner_url})` }}
+            />
+            <div className="absolute inset-0 bg-[rgba(13,13,18,0.72)]" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1a0533] via-[#0d0d12] to-[#0a1628]" />
+        )}
         <div className="absolute top-[-20%] left-[10%] w-[50%] h-[60%] bg-purple-600/20 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-30%] right-[5%] w-[40%] h-[50%] bg-blue-500/15 rounded-full blur-[80px]" />
 
@@ -292,6 +374,66 @@ export default function ArtistDetailPage() {
                   >
                     {deletingArtist ? 'Suppression...' : 'Supprimer artiste + chansons'}
                   </button>
+                </div>
+              )}
+
+              {userRole === 'admin' && !isVirtualArtist && (
+                <div className="mt-5 rounded-[14px] bg-white/[0.05] border border-white/[0.08] p-3.5 space-y-3">
+                  <p className="text-[11px] uppercase tracking-wider text-white/35">Images artiste (admin)</p>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Photo profil URL / Google Drive</label>
+                    <input
+                      value={artistImageUrlInput}
+                      onChange={(e) => setArtistImageUrlInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Uploader photo profil</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setArtistImageFile(e.target.files?.[0] || null)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Bannière URL / Google Drive</label>
+                    <input
+                      value={artistBannerUrlInput}
+                      onChange={(e) => setArtistBannerUrlInput(e.target.value)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/40 mb-1">Uploader bannière</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setArtistBannerFile(e.target.files?.[0] || null)}
+                      className="w-full rounded-[9px] border border-white/[0.14] bg-black/20 px-3 py-2 text-[12px] text-white/85"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveArtistMedia}
+                    disabled={savingArtistMedia}
+                    className="px-3.5 py-2 rounded-lg bg-white/[0.12] hover:bg-white/[0.18] text-white/75 text-[12px] font-medium transition-colors disabled:opacity-30"
+                  >
+                    {savingArtistMedia ? 'Enregistrement...' : 'Enregistrer les images'}
+                  </button>
+
+                  {artistMediaMessage && (
+                    <p className={`text-[12px] ${artistMediaMessage.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
+                      {artistMediaMessage.text}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

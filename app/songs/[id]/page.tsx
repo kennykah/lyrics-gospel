@@ -9,6 +9,7 @@ import type { Song, LrcFile } from '@/types';
 import AppleLyricPlayer from '@/components/AppleLyricPlayer';
 import { slugifyArtistName } from '@/utils/artistSlug';
 import { extractPlainLyrics, generateLrc, parseLrc } from '@/utils/lrcParser';
+import { resolveImageInput } from '@/utils/imageInput';
 
 function isLikelyDirectAudioUrl(url?: string | null) {
   if (!url) return false;
@@ -40,6 +41,7 @@ export default function SongDetailPage() {
   const [metadataArtist, setMetadataArtist] = useState('');
   const [metadataCollaborations, setMetadataCollaborations] = useState('');
   const [metadataCoverImageUrl, setMetadataCoverImageUrl] = useState('');
+  const [metadataCoverImageFile, setMetadataCoverImageFile] = useState<File | null>(null);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -255,12 +257,14 @@ export default function SongDetailPage() {
     setMetadataArtist(song.artist_name || '');
     setMetadataCollaborations(song.collaborations || '');
     setMetadataCoverImageUrl(song.cover_image_url || '');
+    setMetadataCoverImageFile(null);
     setMetadataMessage(null);
     setIsEditingMetadata(true);
   };
 
   const handleCancelMetadataEdit = () => {
     setIsEditingMetadata(false);
+    setMetadataCoverImageFile(null);
     setMetadataMessage(null);
   };
 
@@ -278,12 +282,28 @@ export default function SongDetailPage() {
     setSavingMetadata(true);
     setMetadataMessage(null);
 
+    let resolvedCoverImage: string | null = null;
+    try {
+      resolvedCoverImage = await resolveImageInput({
+        urlInput: metadataCoverImageUrl,
+        file: metadataCoverImageFile,
+        maxMb: 3,
+      });
+    } catch (coverError) {
+      setMetadataMessage({
+        type: 'error',
+        text: coverError instanceof Error ? coverError.message : 'Impossible de traiter le cover.',
+      });
+      setSavingMetadata(false);
+      return;
+    }
+
     const { data, error } = await updateSongMetadata({
       songId: song.id,
       title: metadataTitle,
       artist_name: metadataArtist,
       collaborations: metadataCollaborations,
-      cover_image_url: metadataCoverImageUrl,
+      cover_image_url: resolvedCoverImage,
     });
 
     if (error || !data) {
@@ -297,6 +317,7 @@ export default function SongDetailPage() {
 
     setSong((prev) => (prev ? { ...prev, ...(data as Song) } : prev));
     setMetadataMessage({ type: 'success', text: 'Informations du son mises à jour.' });
+    setMetadataCoverImageFile(null);
     setSavingMetadata(false);
     setIsEditingMetadata(false);
   };
@@ -416,6 +437,10 @@ export default function SongDetailPage() {
                   syncedLyrics={syncedLyrics}
                   lrcRaw={lrc?.lrc_raw}
                   audioUrl={song.audio_url}
+                  songId={song.id}
+                  songTitle={song.title}
+                  songArtistName={song.artist_name}
+                  songCoverImageUrl={song.cover_image_url}
                   onFirstPlay={() => {
                     void trackSongPlay(song.id);
                   }}
@@ -709,13 +734,27 @@ export default function SongDetailPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Cover URL (optionnel)</label>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Cover URL / Google Drive (optionnel)</label>
                     <input
                       value={metadataCoverImageUrl}
                       onChange={(e) => setMetadataCoverImageUrl(e.target.value)}
                       className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
                       placeholder="https://.../cover.jpg"
                     />
+                    <p className="text-[11px] text-white/35 mt-1">Collez un lien image direct ou un lien Google Drive partageable.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Uploader cover local (optionnel)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setMetadataCoverImageFile(e.target.files?.[0] || null)}
+                      className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2 text-[12px] text-white/80 file:mr-3 file:rounded-md file:border-0 file:bg-white/[0.1] file:px-2.5 file:py-1.5 file:text-white/80"
+                    />
+                    {metadataCoverImageFile && (
+                      <p className="text-[11px] text-white/35 mt-1 truncate">Fichier: {metadataCoverImageFile.name}</p>
+                    )}
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-2">

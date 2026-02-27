@@ -11,6 +11,7 @@ export async function getCurrentUserId() {
 export async function createSong(params: {
   title: string;
   artist_name: string;
+  cover_image_url?: string | null;
   audio_url?: string | null;
   lyrics_text?: string | null;
   created_by?: string | null;
@@ -24,6 +25,7 @@ export async function createSong(params: {
       title: params.title,
       slug,
       artist_name: params.artist_name,
+      cover_image_url: params.cover_image_url?.trim() || null,
       audio_url: audioUrl,
       lyrics_text: params.lyrics_text ?? '',
       submitted_by: params.submitted_by ?? params.created_by ?? null,
@@ -279,6 +281,69 @@ export async function fetchArtistBySlug(slug: string) {
     .select('*')
     .eq('slug', slug)
     .maybeSingle();
+}
+
+export async function upsertArtistByName(params: {
+  name: string;
+  image_url?: string | null;
+  banner_url?: string | null;
+}) {
+  const name = params.name.trim();
+  const slug = slugifyArtistName(name);
+  const imageUrl = params.image_url?.trim() || null;
+  const bannerUrl = params.banner_url?.trim() || null;
+
+  const { data: existing, error: lookupError } = await supabase
+    .from('artists')
+    .select('id')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (lookupError) {
+    return { data: null, error: lookupError };
+  }
+
+  if (existing?.id) {
+    return supabase
+      .from('artists')
+      .update({
+        name,
+        image_url: imageUrl,
+        banner_url: bannerUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+  }
+
+  return supabase
+    .from('artists')
+    .insert({
+      name,
+      slug,
+      image_url: imageUrl,
+      banner_url: bannerUrl,
+    })
+    .select()
+    .single();
+}
+
+export async function updateArtistMediaById(params: {
+  artistId: string;
+  image_url?: string | null;
+  banner_url?: string | null;
+}) {
+  return supabase
+    .from('artists')
+    .update({
+      image_url: params.image_url?.trim() || null,
+      banner_url: params.banner_url?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.artistId)
+    .select()
+    .single();
 }
 
 export async function fetchSongsByArtistName(artistName: string, limit = 20) {

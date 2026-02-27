@@ -35,6 +35,7 @@ export interface Artist {
   slug: string;
   bio?: string;
   image_url?: string;
+  banner_url?: string;
   quote?: string;
   ministry?: string;
   country?: string;

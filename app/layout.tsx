@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from '@/components/Header';
 import SpotlightSearch from '@/components/SpotlightSearch';
+import FloatingMiniPlayer from '@/components/FloatingMiniPlayer';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -44,6 +45,7 @@ export default function RootLayout({
         </a>
         <Header />
         <SpotlightSearch />
+        <FloatingMiniPlayer />
         <main id="main-content">
           {children}
         </main>

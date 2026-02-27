@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS artists (
   slug TEXT NOT NULL UNIQUE,
   bio TEXT,
   image_url TEXT,
+  banner_url TEXT,
   quote TEXT,                          -- A quote/message from the artist
   ministry TEXT,                       -- Ministry or church they belong to
   country TEXT,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS artists (
 -- Ensure all columns exist (safe for re-runs on existing tables)
 ALTER TABLE artists ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE artists ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE artists ADD COLUMN IF NOT EXISTS banner_url TEXT;
 ALTER TABLE artists ADD COLUMN IF NOT EXISTS quote TEXT;
 ALTER TABLE artists ADD COLUMN IF NOT EXISTS ministry TEXT;
 ALTER TABLE artists ADD COLUMN IF NOT EXISTS country TEXT;
