@@ -149,8 +149,10 @@ export async function updateSongMetadata(params: {
   title: string;
   artist_name: string;
   collaborations?: string | null;
+  cover_image_url?: string | null;
 }) {
   const collaborations = params.collaborations?.trim() || null;
+  const coverImageUrl = params.cover_image_url?.trim() || null;
 
   return supabase
     .from('songs')
@@ -158,6 +160,7 @@ export async function updateSongMetadata(params: {
       title: params.title.trim(),
       artist_name: params.artist_name.trim(),
       collaborations,
+      cover_image_url: coverImageUrl,
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.songId)
@@ -334,7 +337,78 @@ export async function trackSongPlay(songId: string) {
 }
 
 export async function fetchAdminSongStats(limit = 100) {
-  return supabase.rpc('admin_song_stats', {
+  const withLimit = await supabase.rpc('admin_song_stats', {
     p_limit: limit,
   });
+
+  if (!withLimit.error) {
+    return withLimit;
+  }
+
+  const rpcMissing = /admin_song_stats|schema cache|PGRST202/i.test(withLimit.error.message || '');
+
+  if (!rpcMissing) {
+    return withLimit;
+  }
+
+  const withoutLimit = await supabase.rpc('admin_song_stats');
+  if (!withoutLimit.error) {
+    return withoutLimit;
+  }
+
+  const [songsRes, metricsRes] = await Promise.all([
+    supabase
+      .from('songs')
+      .select('id,title,artist_name,updated_at,created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('song_metrics')
+      .select('song_id,visit_count,play_count,updated_at'),
+  ]);
+
+  if (songsRes.error) {
+    return {
+      data: null,
+      error: {
+        ...songsRes.error,
+        message: 'Impossible de charger les stats. Vérifiez que supabase/song_metrics.sql est bien exécuté.',
+      },
+    };
+  }
+
+  const metricsMap = new Map<string, { visit_count: number; play_count: number; updated_at: string | null }>();
+
+  if (!metricsRes.error && metricsRes.data) {
+    for (const metric of metricsRes.data) {
+      metricsMap.set(metric.song_id, {
+        visit_count: Number(metric.visit_count || 0),
+        play_count: Number(metric.play_count || 0),
+        updated_at: metric.updated_at || null,
+      });
+    }
+  }
+
+  const rows = (songsRes.data || []).map((song) => {
+    const metric = metricsMap.get(song.id);
+    return {
+      song_id: song.id,
+      title: song.title,
+      artist_name: song.artist_name,
+      visit_count: metric?.visit_count ?? 0,
+      play_count: metric?.play_count ?? 0,
+      last_activity: metric?.updated_at ?? song.updated_at ?? song.created_at ?? new Date(0).toISOString(),
+    };
+  });
+
+  rows.sort((a, b) => {
+    const playDiff = Number(b.play_count || 0) - Number(a.play_count || 0);
+    if (playDiff !== 0) return playDiff;
+    return Number(b.visit_count || 0) - Number(a.visit_count || 0);
+  });
+
+  return {
+    data: rows.slice(0, limit),
+    error: null,
+  };
 }

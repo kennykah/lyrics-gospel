@@ -84,3 +84,21 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_song_stats(INTEGER) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.admin_song_stats()
+RETURNS TABLE(
+  song_id UUID,
+  title TEXT,
+  artist_name TEXT,
+  visit_count BIGINT,
+  play_count BIGINT,
+  last_activity TIMESTAMPTZ
+)
+LANGUAGE SQL
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT * FROM public.admin_song_stats(100);
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_song_stats() TO authenticated;

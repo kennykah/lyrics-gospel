@@ -39,6 +39,7 @@ export default function SongDetailPage() {
   const [metadataTitle, setMetadataTitle] = useState('');
   const [metadataArtist, setMetadataArtist] = useState('');
   const [metadataCollaborations, setMetadataCollaborations] = useState('');
+  const [metadataCoverImageUrl, setMetadataCoverImageUrl] = useState('');
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -253,6 +254,7 @@ export default function SongDetailPage() {
     setMetadataTitle(song.title || '');
     setMetadataArtist(song.artist_name || '');
     setMetadataCollaborations(song.collaborations || '');
+    setMetadataCoverImageUrl(song.cover_image_url || '');
     setMetadataMessage(null);
     setIsEditingMetadata(true);
   };
@@ -281,6 +283,7 @@ export default function SongDetailPage() {
       title: metadataTitle,
       artist_name: metadataArtist,
       collaborations: metadataCollaborations,
+      cover_image_url: metadataCoverImageUrl,
     });
 
     if (error || !data) {
@@ -386,11 +389,19 @@ export default function SongDetailPage() {
             <div className="space-y-6">
               {/* Song info header */}
               <div className="flex items-center gap-5">
-                <div className="w-20 h-20 rounded-[18px] bg-gradient-to-br from-purple-500/40 to-pink-500/30 backdrop-blur-sm flex items-center justify-center border border-white/[0.08] shadow-xl">
-                  <svg className="w-8 h-8 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-                  </svg>
-                </div>
+                {song.cover_image_url?.trim() ? (
+                  <img
+                    src={song.cover_image_url}
+                    alt={`Cover ${song.title}`}
+                    className="w-20 h-20 rounded-[18px] object-cover border border-white/[0.08] shadow-xl"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-[18px] bg-gradient-to-br from-purple-500/40 to-pink-500/30 backdrop-blur-sm flex items-center justify-center border border-white/[0.08] shadow-xl">
+                    <svg className="w-8 h-8 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+                    </svg>
+                  </div>
+                )}
                 <div>
                   <h1 className="text-2xl font-bold tracking-[-0.02em]">{song.title}</h1>
                   <p className="text-white/50 text-[15px]">{artistDisplay}</p>
@@ -634,7 +645,7 @@ export default function SongDetailPage() {
                         onClick={handleStartMetadataEdit}
                         className="h-10 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-white/70 transition-colors sm:col-span-2"
                       >
-                        Modifier titre / artiste
+                        Modifier infos du son
                       </button>
                       <button
                         onClick={handleDeleteSong}
@@ -662,7 +673,7 @@ export default function SongDetailPage() {
                 <div className="rounded-[20px] bg-white/[0.04] border border-white/[0.06] p-4 sm:p-5 space-y-3">
                   <h3 className="text-[12px] font-semibold text-white/80">Modification des informations du son</h3>
                   <p className="text-[12px] text-white/45 leading-relaxed">
-                    Mettez à jour uniquement le titre, l’artiste principal et les collaborations, sans changer les paroles ni la synchronisation.
+                    Mettez à jour le titre, l’artiste principal, les collaborations et le cover (optionnel), sans changer les paroles ni la synchronisation.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -694,6 +705,16 @@ export default function SongDetailPage() {
                       onChange={(e) => setMetadataCollaborations(e.target.value)}
                       className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
                       placeholder="Ex: Morijah, Dena Mwana"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Cover URL (optionnel)</label>
+                    <input
+                      value={metadataCoverImageUrl}
+                      onChange={(e) => setMetadataCoverImageUrl(e.target.value)}
+                      className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 focus:outline-none focus:border-[--accent]"
+                      placeholder="https://.../cover.jpg"
                     />
                   </div>
 

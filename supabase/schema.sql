@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS songs (
   slug TEXT NOT NULL UNIQUE,
   artist_name TEXT NOT NULL,
   collaborations TEXT,
+  cover_image_url TEXT,
   album TEXT,
   release_year INTEGER,
   audio_url TEXT NOT NULL,
