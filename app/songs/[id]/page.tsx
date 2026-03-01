@@ -18,6 +18,106 @@ function isLikelyDirectAudioUrl(url?: string | null) {
   return /(\.mp3|\.wav|\.m4a|\.ogg|\.flac|\.aac|\.webm)(\?|$)/i.test(url);
 }
 
+type EdificationSection = {
+  title: string;
+  content: string;
+};
+
+type ParsedEdification = {
+  headline: string;
+  themes: string;
+  sections: EdificationSection[];
+};
+
+function buildEdificationTemplate(songTitle: string, artistName: string) {
+  return `${songTitle} — ${artistName}
+
+Catégorisation
+
+Thèmes : Adoration, Restauration, Consolation.
+
+1. Fondations Bibliques
+
+Ancrage scripturaire de l'œuvre.
+
+2. Message Central
+
+Synthèse de l'intention de l'artiste.
+
+3. Perspective Contemporaine
+
+Résonance avec les réalités actuelles.
+
+4. Guide de Méditation
+
+Réflexion et application.
+
+Question de réflexion :
+
+5. Recommandations de lecture
+
+Lectures complémentaires pour approfondir le message.`;
+}
+
+function parseEdificationContent(raw?: string | null): ParsedEdification | null {
+  const content = raw?.trim();
+  if (!content) return null;
+
+  const lines = content.split(/\r?\n/);
+  let headline = '';
+  let themes = '';
+  const sections: EdificationSection[] = [];
+
+  let currentTitle = '';
+  let currentBody: string[] = [];
+
+  const flushSection = () => {
+    if (!currentTitle && currentBody.join('\n').trim() === '') return;
+    sections.push({
+      title: currentTitle || 'Contenu',
+      content: currentBody.join('\n').trim(),
+    });
+    currentTitle = '';
+    currentBody = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (!headline && trimmed) {
+      const looksLikeHeading = /^#{1,3}\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed);
+      const looksLikeThemes = /^th[eè]mes\s*:/i.test(trimmed);
+      if (!looksLikeHeading && !looksLikeThemes) {
+        headline = trimmed;
+        continue;
+      }
+    }
+
+    if (!themes && /^th[eè]mes\s*:/i.test(trimmed)) {
+      themes = trimmed.replace(/^th[eè]mes\s*:\s*/i, '').trim();
+      continue;
+    }
+
+    const hashHeading = trimmed.match(/^#{1,3}\s+(.+)$/);
+    const numberHeading = trimmed.match(/^\d+\.\s+(.+)$/);
+    const plainSectionHeading = /^catégorisation$/i.test(trimmed);
+
+    if (hashHeading || numberHeading || plainSectionHeading) {
+      flushSection();
+      currentTitle = (hashHeading?.[1] || numberHeading?.[1] || trimmed).trim();
+      continue;
+    }
+
+    currentBody.push(line);
+  }
+
+  flushSection();
+
+  if (!headline) headline = 'Ressources d’édification';
+  return { headline, themes, sections };
+}
+
 export default function SongDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -42,6 +142,7 @@ export default function SongDetailPage() {
   const [metadataCollaborations, setMetadataCollaborations] = useState('');
   const [metadataCoverImageUrl, setMetadataCoverImageUrl] = useState('');
   const [metadataCoverImageFile, setMetadataCoverImageFile] = useState<File | null>(null);
+  const [metadataEdificationContent, setMetadataEdificationContent] = useState('');
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -110,6 +211,11 @@ export default function SongDetailPage() {
     if (lrc?.lrc_raw?.trim()) return extractPlainLyrics(lrc.lrc_raw);
     return '';
   }, [syncedLyrics, song, lrc]);
+
+  const parsedEdification = useMemo(
+    () => parseEdificationContent(song?.edification_content),
+    [song?.edification_content]
+  );
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -257,6 +363,7 @@ export default function SongDetailPage() {
     setMetadataArtist(song.artist_name || '');
     setMetadataCollaborations(song.collaborations || '');
     setMetadataCoverImageUrl(song.cover_image_url || '');
+    setMetadataEdificationContent(song.edification_content || buildEdificationTemplate(song.title, song.artist_name));
     setMetadataCoverImageFile(null);
     setMetadataMessage(null);
     setIsEditingMetadata(true);
@@ -304,6 +411,7 @@ export default function SongDetailPage() {
       artist_name: metadataArtist,
       collaborations: metadataCollaborations,
       cover_image_url: resolvedCoverImage,
+      edification_content: metadataEdificationContent,
     });
 
     if (error || !data) {
@@ -568,58 +676,46 @@ export default function SongDetailPage() {
                     <span className="text-[15px] font-semibold text-white">Le Message</span>
                   </div>
 
-                  <div className="p-6 space-y-6">
-                    <div>
-                      <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">
-                        L&apos;histoire derrière la chanson
-                      </h4>
-                      <div className="rounded-[14px] bg-white/[0.04] p-4">
-                        <p className="text-[14px] text-white/60 leading-relaxed">
-                          Ce chant a été écrit lors d&apos;une retraite spirituelle.
-                          L&apos;auteur raconte comment il a été inspiré par l&apos;image
-                          de Pierre marchant sur l&apos;eau, non pas comme un miracle
-                          lointain, mais comme une métaphore de la confiance quotidienne.
-                        </p>
-                        <p className="text-[14px] text-white/60 leading-relaxed mt-3">
-                          Cette chanson nous invite à sortir de notre zone de confort
-                          pour trouver Dieu dans l&apos;inconnu.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">
-                        Versets associés
-                      </h4>
-                      <div className="space-y-3">
-                        <div className="rounded-[14px] bg-white/[0.04] p-4 border-l-2 border-[#4fa4e0]">
-                          <p className="text-[14px] text-white/70 leading-relaxed italic">
-                            &ldquo;Il dit: Viens! Pierre sortit de la barque, et
-                            marcha sur les eaux, pour aller vers Jésus.&rdquo;
-                          </p>
-                          <p className="text-[13px] text-[#4fa4e0] font-medium mt-2">Matthieu 14:29</p>
+                  <div className="p-6 space-y-5">
+                    {parsedEdification ? (
+                      <>
+                        <div className="rounded-[14px] bg-white/[0.04] p-4">
+                          <p className="text-[16px] font-semibold text-white">{parsedEdification.headline}</p>
+                          {parsedEdification.themes && (
+                            <p className="text-[13px] text-white/60 mt-2">
+                              <span className="text-white/35">Thèmes :</span> {parsedEdification.themes}
+                            </p>
+                          )}
                         </div>
-                        <div className="rounded-[14px] bg-white/[0.04] p-4 border-l-2 border-[#a78bfa]">
-                          <p className="text-[14px] text-white/70 leading-relaxed italic">
-                            &ldquo;Car je suis l&apos;Éternel, ton Dieu, Qui fortifie ta
-                            droite, Qui te dis: Ne crains rien, Je viens à ton
-                            secours.&rdquo;
-                          </p>
-                          <p className="text-[13px] text-[#a78bfa] font-medium mt-2">Ésaïe 41:13</p>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div>
-                      <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">
-                        Note personnelle
-                      </h4>
+                        {parsedEdification.sections.map((section, index) => (
+                          <div key={`${section.title}-${index}`}>
+                            <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/30 mb-3">
+                              {section.title}
+                            </h4>
+                            <div className="rounded-[14px] bg-white/[0.04] p-4">
+                              <p className="text-[14px] text-white/70 leading-relaxed whitespace-pre-line">
+                                {section.content || '—'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
                       <div className="rounded-[14px] bg-white/[0.04] p-4">
-                        <p className="text-[14px] text-white/40 italic leading-relaxed">
-                          Ajoutez votre propre réflexion sur ce chant...
+                        <p className="text-[14px] text-white/50 leading-relaxed">
+                          Aucun contenu d’édification n’a encore été ajouté pour ce son.
                         </p>
+                        {userRole === 'admin' && (
+                          <button
+                            onClick={handleStartMetadataEdit}
+                            className="mt-3 h-9 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-white/70 transition-colors"
+                          >
+                            Ajouter le contenu maintenant
+                          </button>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -742,6 +838,20 @@ export default function SongDetailPage() {
                       placeholder="https://.../cover.jpg"
                     />
                     <p className="text-[11px] text-white/35 mt-1">Collez un lien image direct ou un lien Google Drive partageable.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-white/35 mb-1.5">Contenu d&apos;édification (dynamique)</label>
+                    <textarea
+                      value={metadataEdificationContent}
+                      onChange={(e) => setMetadataEdificationContent(e.target.value)}
+                      rows={16}
+                      className="w-full rounded-[10px] border border-white/[0.12] bg-black/20 px-3 py-2.5 text-[13px] text-white/80 leading-relaxed whitespace-pre-wrap focus:outline-none focus:border-[--accent]"
+                      placeholder="Ajoute ici le contenu complet du message, sections, versets, questions, lectures..."
+                    />
+                    <p className="text-[11px] text-white/35 mt-1">
+                      Tu peux utiliser ton propre format (lignes, paragraphes, numérotation). Chaque son aura son contenu unique.
+                    </p>
                   </div>
 
                   <div>

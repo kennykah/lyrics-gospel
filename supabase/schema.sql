@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS songs (
   artist_name TEXT NOT NULL,
   collaborations TEXT,
   cover_image_url TEXT,
+  edification_content TEXT,
   album TEXT,
   release_year INTEGER,
   audio_url TEXT NOT NULL,

@@ -152,9 +152,11 @@ export async function updateSongMetadata(params: {
   artist_name: string;
   collaborations?: string | null;
   cover_image_url?: string | null;
+  edification_content?: string | null;
 }) {
   const collaborations = params.collaborations?.trim() || null;
   const coverImageUrl = params.cover_image_url?.trim() || null;
+  const edificationContent = params.edification_content?.trim() || null;
 
   return supabase
     .from('songs')
@@ -163,6 +165,7 @@ export async function updateSongMetadata(params: {
       artist_name: params.artist_name.trim(),
       collaborations,
       cover_image_url: coverImageUrl,
+      edification_content: edificationContent,
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.songId)

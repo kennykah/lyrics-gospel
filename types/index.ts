@@ -5,6 +5,7 @@ export interface Song {
   artist_name: string;
   collaborations?: string | null;
   cover_image_url?: string | null;
+  edification_content?: string | null;
   album?: string;
   release_year?: number;
   audio_url?: string;
