@@ -20,6 +20,8 @@ ALTER TABLE lrc_files ADD COLUMN IF NOT EXISTS created_by UUID;
 -- restore strict insert policies (prod)
 DROP POLICY IF EXISTS "songs_insert_public" ON songs;
 DROP POLICY IF EXISTS "lrc_insert_public" ON lrc_files;
+DROP POLICY IF EXISTS "songs_insert_authenticated" ON songs;
+DROP POLICY IF EXISTS "lrc_insert_authenticated" ON lrc_files;
 
 CREATE POLICY "songs_insert_authenticated" ON songs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "lrc_insert_authenticated" ON lrc_files FOR INSERT WITH CHECK (auth.role() = 'authenticated');
