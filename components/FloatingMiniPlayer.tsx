@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getPersistentAudioElement } from '@/lib/persistentAudio';
-import { getPlayerTrack, subscribePlayerTrack, type PlayerTrackMeta } from '@/lib/playerSession';
+import { getPlayerTrack, setPlayerTrack, subscribePlayerTrack, type PlayerTrackMeta } from '@/lib/playerSession';
 
 export default function FloatingMiniPlayer() {
   const pathname = usePathname();
@@ -64,6 +64,14 @@ export default function FloatingMiniPlayer() {
     else audio.pause();
   };
 
+  const closeMiniPlayer = () => {
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setPlayerTrack(null);
+  };
+
   return (
     <div className="fixed right-3 bottom-3 sm:right-5 sm:bottom-5 z-[90] w-[300px] max-w-[calc(100vw-24px)] rounded-[16px] bg-[rgba(13,13,18,0.92)] border border-white/[0.12] shadow-2xl backdrop-blur-md p-3">
       <div className="flex items-center gap-3">
@@ -82,17 +90,30 @@ export default function FloatingMiniPlayer() {
           <p className="text-[11px] text-white/60 truncate">{track?.artistName}</p>
         </div>
 
-        <button
-          onClick={togglePlay}
-          className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-          aria-label={isPlaying ? 'Pause' : 'Lecture'}
-        >
-          {isPlaying ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" /></svg>
-          ) : (
-            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-          )}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={togglePlay}
+            className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+            aria-label={isPlaying ? 'Pause' : 'Lecture'}
+          >
+            {isPlaying ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" /></svg>
+            ) : (
+              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+
+          <button
+            onClick={closeMiniPlayer}
+            className="w-8 h-8 rounded-full bg-white/[0.1] hover:bg-white/[0.18] text-white/75 flex items-center justify-center transition-colors"
+            aria-label="Fermer le mini lecteur"
+            title="Fermer"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="mt-2.5 h-1 rounded-full bg-white/[0.12] overflow-hidden">

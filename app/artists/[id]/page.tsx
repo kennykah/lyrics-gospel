@@ -228,12 +228,12 @@ export default function ArtistDetailPage() {
       imageUrl = await resolveImageInput({
         urlInput: artistImageUrlInput,
         file: artistImageFile,
-        maxMb: 3,
+        maxMb: 10,
       });
       bannerUrl = await resolveImageInput({
         urlInput: artistBannerUrlInput,
         file: artistBannerFile,
-        maxMb: 4,
+        maxMb: 10,
       });
     } catch (mediaError) {
       setArtistMediaMessage({
